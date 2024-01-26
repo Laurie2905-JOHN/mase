@@ -44,7 +44,29 @@ class JSC_Tiny(nn.Module):
     def forward(self, x):
         return self.seq_blocks(x)
 
+class JSC_Tiny_x10(nn.Module):
+    def __init__(self, info):
+        super(JSC_Tiny_x10, self).__init__()
+        self.seq_blocks = nn.Sequential(
+            # 1st Layer
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            nn.Linear(16, 40),  # Increased number of output features
 
+            # Additional Layers
+            nn.BatchNorm1d(40),
+            nn.ReLU(),
+            nn.Linear(40, 25),  # New layer
+
+            # Final Layer
+            nn.BatchNorm1d(25),
+            nn.ReLU(),
+            nn.Linear(25, 5),  # Output layer with 5 features as in the original model
+        )
+
+    def forward(self, x):
+        return self.seq_blocks(x)
+    
 class JSC_S(nn.Module):
     def __init__(self, info):
         super(JSC_S, self).__init__()
@@ -94,3 +116,6 @@ def get_jsc_tiny(info):
 
 def get_jsc_s(info):
     return JSC_S(info)
+
+def get_jsc_x10(info):
+    return JSC_Tiny_x10(info)
