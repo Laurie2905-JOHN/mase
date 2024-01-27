@@ -115,7 +115,7 @@ class LinearInteger(_LinearBase):
         self.b_quantizer = partial(
             integer_quantizer, width=b_width, frac_width=b_frac_width
         )
-
+        
     # def get_output_bitwidth(self):
     #     config = self.config
     #     w_width, w_frac = config["weight_width"], config["weight_frac_width"]
