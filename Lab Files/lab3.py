@@ -105,107 +105,137 @@ for d_config in data_in_frac_widths:
 import torch
 from torchmetrics.classification import MulticlassAccuracy
 from chop.passes.graph.transforms import quantize_transform_pass
-
+import subprocess
+import threading
+import time
+import torchmetrics
+import numpy as np
 mg, _ = init_metadata_analysis_pass(mg, None)
 mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
 mg, _ = add_software_metadata_analysis_pass(mg, None)
 
+# Instantiate metrics with the specified task type
 metric = MulticlassAccuracy(num_classes=5)
-num_batchs = 5
-# This first loop is basically our search strategy,
-# in this case, it is a simple brute force search
+precision_metric = torchmetrics.Precision(num_classes=5, average='weighted', task='multiclass')
+recall_metric = torchmetrics.Recall(num_classes=5, average='weighted', task='multiclass')
+f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multiclass')
 
+num_batchs = 5
+
+# Define a class for monitoring GPU power in a separate thread
+class PowerMonitor(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.power_readings = []  # List to store power readings
+        self.running = False      # Flag to control the monitoring loop
+
+    def run(self):
+        self.running = True
+        while self.running:
+            # Get current GPU power usage and append it to the list
+            power = sum(get_gpu_power_usage())
+            self.power_readings.append(power)
+            time.sleep(0.00001)  # Wait before next reading
+
+    def stop(self):
+        self.running = False  # Stop the monitoring loop
+
+# Create CUDA events for timing GPU operations
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
 
-
-import subprocess
-import psutil
-
+# Function to get current GPU power usage using NVIDIA System Management Interface
 def get_gpu_power_usage():
     try:
+        # Execute nvidia-smi command to get power usage
         smi_output = subprocess.check_output(['nvidia-smi', '--query-gpu=power.draw', '--format=csv,noheader,nounits']).decode().strip()
-        power_usage = [float(x) for x in smi_output.split('\n')]  # power usage in watts
+        # Convert power usage output to a list of floats
+        power_usage = [float(x) for x in smi_output.split('\n')]
         return power_usage
     except Exception as e:
+        # Handle exceptions (like nvidia-smi not found)
         print(f"Error obtaining GPU power usage: {e}")
         return []
 
-def get_cpu_utilization(): 
-    return psutil.cpu_percent(interval=None)
-
-# Define TDP for your CPU
-cpu_tdp = 28  # in watts
-
-recorded_accs = []
-latencies = []
-gpu_power_usages = []
-cpu_utilizations = []  # List to store CPU utilization for each batch
-
-cpu_tdp = 28  # in watts, your CPU's TDP
-cpu_power_usages = []  # List to store estimated CPU power usage for each batch
-
+# Iterate over different configurations
 for i, config in enumerate(search_spaces):
+    # Apply transformations to the model based on the configuration
     mg, _ = quantize_transform_pass(mg, config)
-    j = 0
 
-    acc_avg, loss_avg = 0, 0
+    # Initialize lists to store metrics for each configuration
+    recorded_accs = []
+    latencies = []
+    gpu_power_usages = []
     accs, losses = [], []
-    for inputs in data_module.train_dataloader():
+    
+    # Iterate over batches in the training data
+    for j, inputs in enumerate(data_module.train_dataloader()):
+        # Break the loop after processing the specified number of batches
+        if j >= num_batchs:
+            break
+
+        # Unpack inputs and labels
         xs, ys = inputs
 
-        # Reset CPU utilization measurement
-        _ = get_cpu_utilization()  # Call once to reset the measurement
+        # Instantiate and start the power monitor
+        power_monitor = PowerMonitor()
+        power_monitor.start()
 
-        # Measure GPU power usage before prediction
-        gpu_power_before = sum(get_gpu_power_usage())
-
-        # Start measuring time
-        start_time = time.time()
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
+        # Record start time of the model prediction
         start.record()
-        
-        preds = mg.model(xs)  # Model prediction
-        
-        end.record()
-        torch.cuda.synchronize()  # Wait for GPU operations to finish
-        end_time = time.time()
-        latency = start.elapsed_time(end)  # Time in milliseconds
+        preds = mg.model(xs)  # Run model prediction
+        end.record()          # Record end time
+
+        # Synchronize to ensure all GPU operations are finished
+        torch.cuda.synchronize()
+
+        # Calculate latency between start and end events
+        latency = start.elapsed_time(end)
         latencies.append(latency)
+        
+        # Stop the power monitor and calculate average power
+        power_monitor.stop()
+        power_monitor.join()  # Ensure monitoring thread has finished
+        avg_power = sum(power_monitor.power_readings) / len(power_monitor.power_readings)
 
-        # Measure GPU power usage after prediction
-        gpu_power_after = sum(get_gpu_power_usage())
-        gpu_power_used = (gpu_power_after - gpu_power_before)
-        gpu_power_usages.append(gpu_power_used)
+        # Store the calculated average power
+        gpu_power_usages.append(avg_power)
 
-        # Measure CPU utilization and estimate power usage
-        operation_duration = end_time - start_time  # Duration of the operation
-        cpu_utilization = get_cpu_utilization()  # Get CPU utilization over operation duration
-        cpu_utilizations.append(cpu_utilization)
-        estimated_cpu_power = (cpu_utilization / 100) * cpu_tdp * operation_duration / 3600  # Convert to kWh
-        cpu_power_usages.append(estimated_cpu_power)
-
+        # Calculate accuracy and loss for the batch
         loss = torch.nn.functional.cross_entropy(preds, ys)
         acc = metric(preds, ys)
         accs.append(acc)
-        losses.append(loss)
+        losses.append(loss.item())
 
-        if j > num_batchs:
-            break
-        j += 1
+        # Update torchmetrics metrics
+        preds_labels = torch.argmax(preds, dim=1)
+        precision_metric(preds_labels, ys)
+        recall_metric(preds_labels, ys)
+        f1_metric(preds_labels, ys)
 
+    # Compute final precision, recall, and F1 for this configuration
+    avg_precision = precision_metric.compute()
+    avg_recall = recall_metric.compute()
+    avg_f1 = f1_metric.compute()
+
+    # Reset metrics for the next configuration
+    precision_metric.reset()
+    recall_metric.reset()
+    f1_metric.reset()
+
+    # Calculate and record average metrics for the current configuration
     acc_avg = sum(accs) / len(accs)
     loss_avg = sum(losses) / len(losses)
     recorded_accs.append(acc_avg)
+    avg_latency = sum(latencies) / len(latencies)
+    avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
 
-# Analyze latencies and power usage
-avg_latency = sum(latencies) / len(latencies)
-avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
-avg_cpu_utilization = sum(cpu_utilizations) / len(cpu_utilizations)
-avg_cpu_power_usage = sum(cpu_power_usages) / len(cpu_power_usages)
-
-print(f"Average Latency per Batch: {avg_latency} milliseconds")
-print(f"Average GPU Power Usage per Batch: {avg_gpu_power_usage} watts")
-print(f"Average CPU Utilization per Batch: {avg_cpu_utilization}%")
-print(f"Average CPU Power Usage per Batch: {avg_cpu_power_usage} Wh")
+    # Print the average metrics for the current configuration
+    print(f"Configuration {i}:")
+    print(f"Average Accuracy: {acc_avg}")
+    print(f"Average Precision: {avg_precision}")
+    print(f"Average Recall: {avg_recall}")
+    print(f"Average F1 Score: {avg_f1}")
+    print(f"Average Loss: {loss_avg}")
+    print(f"Average Latency: {avg_latency} milliseconds")
+    print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
