@@ -28,8 +28,6 @@ from chop.ir.graph.mase_graph import MaseGraph
 from chop.models import get_model_info, get_model
 
 
-
-
 logger = logging.getLogger("chop")
 logger.setLevel(logging.INFO)
 

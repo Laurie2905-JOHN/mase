@@ -176,6 +176,11 @@ mg, _ = report_node_meta_param_analysis_pass(mg, {"which": ("software",)})
 ### 6. Write code to show and verify that the weights of these layers are indeed quantised. You might need to go through the source code of the implementation of the quantisation pass and also the implementation of the [Quantized Layers](../../machop/chop/passes/transforms/quantize/quantized_modules/linear.py).
 
 ```python
+# Added this function in the linear.py file within the LinearBase class 
+def get_quantized_weight(self) -> Tensor:
+    return self.w_quantizer(self.weight)
+```
+```python
 from chop.ir.graph.mase_graph import MaseGraph
 from chop.passes.graph.utils import get_mase_op, get_mase_type, get_node_actual_target
 import torch
@@ -189,25 +194,56 @@ for ori_n, n in zip(ori_mg.fx_graph.nodes, mg.fx_graph.nodes):
         ori_module = get_node_actual_target(ori_n)
         quant_module = get_node_actual_target(n)
         
-        # Print the difference information
+        # Print the difference information and print the first weights of each module
         print(f'Difference found at name: {n.name}, '
               f'MASE type: {get_mase_type(n)}, MASE operation: {get_mase_op(n)}\n'
-              f'Original module: {type(ori_module)} --> '
-              f'New module: {type(quant_module)}')
-
-        # Print the weights of the original and quantized modules
-        print(f'Weight of original module: {ori_module.weight}')
-        print(f'Weights of quantized module: {quant_module.get_quantized_weight()}')
-
-        # Generate a random input tensor based on the input feature size of the quantized module
-        test_input = torch.randn(quant_module.in_features)
-        print(f'Random generated test input: {test_input}')
-        # Apply the original and quantized modules to the test input and print the outputs
-        print(f'Output for original module: {ori_module(test_input)}')
-        print(f'Output for quantized module: {quant_module(test_input)}')
-
+              f'Original module: {type(ori_module)}, Old Non Quantized Weights: {ori_module.weight[0:1]} --> '
+              f'New module: {type(quant_module)}, New Quantized Weights: {quant_module.get_quantized_weight()[0:1]}')
+        
+        ### NOTE: Can print complete weights by removing the [0:1] from the print statements above ###
+        # # Print the weights of the original and quantized modules
+        # print(f'Weight of original module: {ori_module.weight}')
+        # print(f'Weights of quantized module: {quant_module.get_quantized_weight()}')
+        
+        ### NOTE: Can compare output of original and quantised module ###
+        # # Generate a random input tensor based on the input feature size of the quantized module
+        # test_input = torch.randn(quant_module.in_features)
+        # print(f'Random generated test input: {test_input}')
+        # # Apply the original and quantized modules to the test input and print the outputs
+        # print(f'Output for original module: {ori_module(test_input)}')
+        # print(f'Output for quantized module: {quant_module(test_input)}')
 ```
 
+This code outputs: 
+``` python
+Difference found at name: seq_blocks_2, MASE type: module_related_func, MASE operation: linear
+Original module: <class 'torch.nn.modules.linear.Linear'>, Old Non Quantized Weights: tensor([[-0.0312,  0.1250, -0.0923, -0.2323, -0.0515,  0.1775, -0.0179,  0.1851,
+         -0.0339,  0.0698, -0.0141,  0.0019, -0.2413, -0.1191, -0.2104, -0.0343]],
+       grad_fn=<SliceBackward0>) --> New module: <class 'chop.passes.graph.transforms.quantize.quantized_modules.linear.LinearInteger'>, New Quantized Weights: tensor([[-0.0000,  0.1250, -0.0625, -0.2500, -0.0625,  0.1875, -0.0000,  0.1875,
+         -0.0625,  0.0625, -0.0000,  0.0000, -0.2500, -0.1250, -0.1875, -0.0625]],
+       grad_fn=<SliceBackward0>)
+Difference found at name: seq_blocks_5, MASE type: module_related_func, MASE operation: linear
+Original module: <class 'torch.nn.modules.linear.Linear'>, Old Non Quantized Weights: tensor([[ 0.0497, -0.0559,  0.0175, -0.0045,  0.0795,  0.1399, -0.1013, -0.0333,
+          0.0246,  0.0914, -0.0778, -0.1215,  0.0155,  0.1367, -0.0362, -0.2130,
+          0.1124, -0.1671, -0.0646, -0.0880,  0.0124,  0.0092, -0.0666,  0.0286,
+         -0.1770, -0.0771, -0.0248,  0.1295, -0.0093, -0.0011, -0.1092, -0.0055,
+         -0.0741, -0.0980,  0.1860, -0.0968, -0.0452,  0.0878,  0.0946,  0.1057]],
+       grad_fn=<SliceBackward0>) --> New module: <class 'chop.passes.graph.transforms.quantize.quantized_modules.linear.LinearInteger'>, New Quantized Weights: tensor([[ 0.0625, -0.0625,  0.0000, -0.0000,  0.0625,  0.1250, -0.1250, -0.0625,
+          0.0000,  0.0625, -0.0625, -0.1250,  0.0000,  0.1250, -0.0625, -0.1875,
+          0.1250, -0.1875, -0.0625, -0.0625,  0.0000,  0.0000, -0.0625,  0.0000,
+         -0.1875, -0.0625, -0.0000,  0.1250, -0.0000, -0.0000, -0.1250, -0.0000,
+         -0.0625, -0.1250,  0.1875, -0.1250, -0.0625,  0.0625,  0.1250,  0.1250]],
+       grad_fn=<SliceBackward0>)
+Difference found at name: seq_blocks_8, MASE type: module_related_func, MASE operation: linear
+Original module: <class 'torch.nn.modules.linear.Linear'>, Old Non Quantized Weights: tensor([[-0.3195, -0.0037, -0.2968,  0.0584,  0.1211,  0.2713,  0.1203, -0.0250,
+         -0.1020, -0.0727, -0.0265,  0.2700, -0.2691,  0.3053, -0.2221,  0.3354,
+         -0.1450, -0.0420, -0.2243, -0.2594, -0.0766,  0.3295, -0.1473,  0.1601,
+         -0.2462]], grad_fn=<SliceBackward0>) --> New module: <class 'chop.passes.graph.transforms.quantize.quantized_modules.linear.LinearInteger'>, New Quantized Weights: tensor([[-0.3125, -0.0000, -0.3125,  0.0625,  0.1250,  0.2500,  0.1250, -0.0000,
+         -0.1250, -0.0625, -0.0000,  0.2500, -0.2500,  0.3125, -0.2500,  0.3125,
+         -0.1250, -0.0625, -0.2500, -0.2500, -0.0625,  0.3125, -0.1250,  0.1875,
+         -0.2500]], grad_fn=<SliceBackward0>)
+```
+The results show that the weights are quantized.
 ### 7.  Load your own pre-trained JSC network, and perform perform the quantisation using the command line interface.
 
 # your_dir/mase-tools/machop
