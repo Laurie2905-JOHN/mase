@@ -66,8 +66,8 @@ class _LinearBase(torch.nn.Linear):
             return F.linear(x, w, bias)
 
     # TODO: implement these as passes
-    # def get_quantized_weight(self) -> Tensor:
-    #     return self.w_quantizer(self.weight)
+    def get_quantized_weight(self) -> Tensor:
+        return self.w_quantizer(self.weight)
 
     # def get_quantized_weights_with_inputs(self, x: Tensor) -> Tensor:
     #     x = self.x_quantizer(x)

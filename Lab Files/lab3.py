@@ -135,7 +135,7 @@ class PowerMonitor(threading.Thread):
             # Get current GPU power usage and append it to the list
             power = sum(get_gpu_power_usage())
             self.power_readings.append(power)
-            time.sleep(0.00001)  # Wait before next reading
+            time.sleep(0.001)  # Wait before next reading
 
     def stop(self):
         self.running = False  # Stop the monitoring loop
@@ -181,6 +181,7 @@ for i, config in enumerate(search_spaces):
         power_monitor = PowerMonitor()
         power_monitor.start()
 
+        torch.cuda.empty_cache()
         # Record start time of the model prediction
         start.record()
         preds = mg.model(xs)  # Run model prediction
