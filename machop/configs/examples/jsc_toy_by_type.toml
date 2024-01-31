@@ -62,14 +62,14 @@ eval_mode = true
 
 [search.strategy.sw_runner.basic_evaluation]
 data_loader = "val_dataloader"
-num_samples = 512
+num_samples = 256
 
 [search.strategy.hw_runner.average_bitwidth]
 compare_to = 32 # compare to FP32
 
 [search.strategy.setup]
 n_jobs = 1
-n_trials = 20
+n_trials = 200
 timeout = 20000
 # sampler = "tpe" # Change to reflect brute force method
 sampler = "brute_force"
