@@ -2,7 +2,6 @@
 from .optuna import SearchStrategyOptuna
 from .base import SearchStrategyBase
 
-
 SEARCH_STRATEGY_MAP = {
     # "rl": StrategyRL,
     "optuna": SearchStrategyOptuna,

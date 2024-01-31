@@ -6,21 +6,19 @@ Data was trained using a bash file see Run_Training_Models.sh for detail
 
 The batchsize of a network is a very important hyperparameter. It represents the number of samples used in one forward and backwards pass of the network. Batch sizes of 32, 64, 128, 256 and 512 will be tested, with other parameters set as MASE's default. 
 
-![Description of image](Lab1_Results/train_acc_BS.png)
+![Description of image](Lab1_Results/Batch_new_acc.jpg)
 *Figure 1: Train Learning Curve with Different Batch Sizes*
 
-![Description of image](Lab1_Results/val_acc_BS.png)
+![Description of image](Lab1_Results/Batch_new_val.jpg)
 *Figure 2: Validation Learning Curve with Different Batch Sizes*
 
-The study on how batch size affects neural network performance reveals that extreme batch sizes significantly impact learning efficiency and accuracy. Figures 1 and 2 illustrate that a small batch size of 32 leads to the second lowest validation accuracy (67%) coupled with the longest training time (1.39 hr). Conversely, a large batch size of 512, while substantially reducing training time (6.08 min), results in a decrease in both training and validation accuracy, achieving only 44.6% in validation accuracy.
+The study on how batch size affects neural network performance reveals that extreme batch sizes significantly impact learning efficiency and accuracy. Figures 1 and 2 illustrate that a small batch size of 32 leads to the second lowest validation accuracy (66%) coupled with the longest training time (1.39 hr). Conversely, a large batch size of 512, while substantially reducing training time (6.04 min), results in a decrease in both training and validation accuracy, achieving only 42.8% in validation accuracy.
 
-An optimal batch size seems to be 256, which yields the highest validation accuracy (71%) and the second shortest training duration (10.06 min). Figures 1 and 2 highlight the critical role of batch size adjustment. Varying the batch size can almost halve the validation error and reduce training times by 1357%. Therefore, choosing an optimal batch size is key to neural network success.
+An optimal batch size seems to be 256, which yields the highest validation accuracy (71%) and the second shortest training duration (10.06 min). Figures 1 and 2 highlight the critical role of batch size adjustment. Varying the batch size can almost halve the validation error and reduce training times by 1308%. Therefore, choosing an optimal batch size is key to neural network success.
 
 The batch size influences training time, as larger batch sizes enable more efficient use of resources like GPUs, which are optimized for parallel processing. However, excessively large batches can strain GPU memory, potentially leading to crashes or other issues.
 
 Conversely, smaller batch sizes are often linked to better generalization since they provide noisier estimates of the gradient. This variance can sometimes hinder the learning process, but it also leads to better generalization. Studies have shown that smaller batch sizes tend to converge to flatter minima, while large batch sizes converge to sharp minima, which are associated with poorer generalization.
-
-https://medium.com/geekculture/why-small-batch-sizes-lead-to-greater-generalization-in-deep-learning-a00a32251a4f
 
 ## Modifying Epoch Number
 
@@ -131,7 +129,7 @@ def get_jsc_x10(info):
 
 Training for the X10 model was completed with a batch size of 256 and for 50 epochs, with all other parameters set to default. The Tiny model, used for comparison, was performed with only 20 epochs and a batch size of 256, with all other parameters set to default. It is important to note that, in either model, no hyperparameter was optimized.
 
-Evaluating the larger model's test performance (see Table 1), we see that there is a slight improvement in accuracy. Additionally, Figures 9 and 10 demonstrate a considerably longer training time, as more epochs were used, paired with more computation due to more weights needing to be calculated and updated. Comparing the large model to the smaller Tiny network, we observe a slightly lower error rate. The smaller model is not a great model for comparison as it uses fewer epochs; however, it does show that, without hyperparameter optimization, a considerably smaller model with fewer parameters and epochs can achieve similar accuracy to a model with 10 times the parameters. This demonstrates that machine learning engineers cannot just make models larger to improve accuracy but also have to optimize hyperparameters and model types, such as adding convolutional layers and changing network type.
+Evaluating the larger model's test performance (see Table 1), we see that there is a slight improvement in accuracy. Additionally, Figures 9 and 10 demonstrate a considerably longer training time, as more epochs were used, paired with more computation due to more weights needing to be calculated and updated. Comparing the large model to the smaller tiny network, we observe a slightly lower error rate. The smaller model is not a great model for comparison as it uses fewer epochs; however, it does show that, without hyperparameter optimization, a considerably smaller model with fewer parameters and epochs can achieve similar accuracy to a model with 10 times the parameters. This demonstrates that machine learning engineers cannot just make models larger to improve accuracy but also have to optimize hyperparameters and model types, such as adding convolutional layers and changing network type.
 
 Furthermore, Figure 10 demonstrates that the validation accuracy exhibits minimal improvement after 25 epochs, suggesting that implementing early stopping criteria could effectively reduce computation.
 
