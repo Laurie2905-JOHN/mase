@@ -144,7 +144,7 @@ class SearchStrategyOptuna(SearchStrategyBase):
                     callback_save_study,
                     save_dir=self.save_dir,
                     save_every_n_trials=self.config["setup"].get(
-                        "save_every_n_trials", 10
+                        "save_every_n_trials", 20
                     ),
                 )
             ],

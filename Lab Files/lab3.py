@@ -238,3 +238,4 @@ for i, config in enumerate(search_spaces):
     print(f"Average Loss: {loss_avg}")
     print(f"Average Latency: {avg_latency} milliseconds")
     print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
+
