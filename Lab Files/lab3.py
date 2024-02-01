@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from pprint import pprint as pp
 import time
-
+# cd machop
 # figure out the correct path
 machop_path = Path(".").resolve().parent /"machop"
 assert machop_path.exists(), "Failed to find machop at: {}".format(machop_path)
@@ -85,6 +85,9 @@ pass_args = {
         }
 },}
 
+all_accs, all_precisions, all_recalls, all_f1s = [], [], [], []
+all_losses, all_latencies, all_gpu_powers = [], [], []
+
 import copy
 # build a search space
 data_in_frac_widths = [(16, 8), (8, 6), (8, 4), (4, 2)]
@@ -133,7 +136,7 @@ class PowerMonitor(threading.Thread):
             # Get current GPU power usage and append it to the list
             power = sum(get_gpu_power_usage())
             self.power_readings.append(power)
-            time.sleep(0.001)  # Wait before next reading
+            time.sleep(0.0001)  # Wait before next reading
 
     def stop(self):
         self.running = False  # Stop the monitoring loop
@@ -238,4 +241,75 @@ for i, config in enumerate(search_spaces):
     print(f"Average Loss: {loss_avg}")
     print(f"Average Latency: {avg_latency} milliseconds")
     print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
+
+    all_accs.append(acc_avg)
+    all_precisions.append(avg_precision.item())
+    all_recalls.append(avg_recall.item())
+    all_f1s.append(avg_f1.item())
+    all_losses.append(loss_avg)
+    all_latencies.append(avg_latency)
+    all_gpu_powers.append(avg_gpu_power_usage)
+
+import matplotlib.pyplot as plt
+
+# Assuming you have a list of configurations
+configurations = [f'{i}' for i in range(len(all_accs))]
+
+# Plotting each metric in a separate line graph
+plt.figure(figsize=(15, 10))
+
+# Accuracy
+plt.subplot(3, 3, 1)
+plt.plot(configurations, all_accs, marker='o', color='blue', label='Accuracy')
+plt.title('Accuracy per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Accuracy')
+
+# Loss
+plt.subplot(3, 3, 2)
+plt.plot(configurations, all_losses, marker='o', color='magenta', label='Loss')
+plt.title('Loss per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Loss')
+
+# Precision
+plt.subplot(3, 3, 3)
+plt.plot(configurations, all_precisions, marker='o', color='red', label='Precision')
+plt.title('Precision per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Precision')
+
+# Recall
+plt.subplot(3, 3, 4)
+plt.plot(configurations, all_recalls, marker='o', color='green', label='Recall')
+plt.title('Recall per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Recall')
+
+# F1 Score
+plt.subplot(3, 3, 5)
+plt.plot(configurations, all_f1s, marker='o', color='cyan', label='F1 Score')
+plt.title('F1 Score per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('F1 Score')
+
+# Latency
+plt.subplot(3, 3, 6)
+plt.plot(configurations, all_latencies, marker='o', color='yellow', label='Latency')
+plt.title('Latency per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Latency (ms)')
+
+# GPU Power Usage
+plt.subplot(3, 3, 7)
+plt.plot(configurations, all_gpu_powers, marker='o', color='orange', label='GPU Power Usage')
+plt.title('GPU Power Usage per Configuration')
+plt.xlabel('Configuration')
+plt.ylabel('Power Usage (Watts)')
+
+# Adjust layout for better readability
+plt.tight_layout()
+
+# Show the plot
+plt.show()
 
