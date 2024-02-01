@@ -30,6 +30,10 @@ Metrics Implemented:
 - Precision, Recall and F1 Score 
 - Latency
 
+Reviewing figure 1 we see that GPU power is relatively constant 
+![Description of image](TPE_vs_Brute.png)
+*Figure 1: Performance Analysis of Different Quantization Configurations in the Model*
+
 ### 2.2.  It’s important to note that in this particular case, accuracy and loss actually serve as the same quality metric (do you know why?).
 
 When the output of your model (predictions) represents a probability distribution across classes, the cross-entropy loss function prompts the model to assign a high probability to the correct class. As the model improves in this aspect (i.e., as the loss decreases), it increasingly assigns the highest probability to the correct class, thus enhancing the accuracy.
@@ -79,7 +83,7 @@ TPE-Based Search: 18.01 seconds
 
 This result doesn't necessarily mean that there is no difference in sample efficiency between the two samplers. As discussed, the TPE sampler intelligently selects the hyperparameter space, so the TPESampler is more useful when dealing with a large and complex hyperparameter space where an exhaustive search is impractical or computationally expensive. In the search space defined in the original TOML file, the total number of possible combinations is small, being only 18. With a small number of combinations, the advanced probabilistic modeling of the TPESampler will not provide significant advantages over the complete search that the BruteForceSampler offers.
 
-However, expanding the search space to an infeasible number of computations for brute force to try every combination, Figure 1 shows that TPE intelligently selects a hyperparameter set that it thinks will provide optimum results early on. As the brute force approach never finds this combination in the allotted number of trials, this demonstrates where TPE can be advantageous.
+However, expanding the search space to an infeasible number of computations for brute force to try every combination, Figure 2 shows that TPE intelligently selects a hyperparameter set that it thinks will provide optimum results early on. As the brute force approach never finds this combination in the allotted number of trials, this demonstrates where TPE can be advantageous.
 
 ![Description of image](TPE_vs_Brute.png)
-*Figure 1: Evaluating the Performance of Tree-structured Parzen Estimator (TPE) Versus Brute Force Method in Hyperparameter Sampling*
+*Figure 2: Evaluating the Performance of Tree-structured Parzen Estimator (TPE) Versus Brute Force Method in Hyperparameter Sampling*

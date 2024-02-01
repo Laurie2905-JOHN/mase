@@ -86,11 +86,12 @@ pass_args = {
 },}
 
 all_accs, all_precisions, all_recalls, all_f1s = [], [], [], []
-all_losses, all_latencies, all_gpu_powers = [], [], []
+all_losses, all_latencies, all_gpu_powers, all_gpu_energy = [], [], [], []
 
 import copy
+# Added another (16, 8) config to add 4 warm up configs 
 # build a search space
-data_in_frac_widths = [(16, 8), (8, 6), (8, 4), (4, 2)]
+data_in_frac_widths = [(16, 8), (16, 8), (8, 6), (8, 4), (4, 2)]
 w_in_frac_widths = [(16, 8), (8, 6), (8, 4), (4, 2)]
 search_spaces = []
 for d_config in data_in_frac_widths:
@@ -121,7 +122,7 @@ precision_metric = torchmetrics.Precision(num_classes=5, average='weighted', tas
 recall_metric = torchmetrics.Recall(num_classes=5, average='weighted', task='multiclass')
 f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multiclass')
 
-num_batchs = 5
+num_batchs = 8
 
 # Define a class for monitoring GPU power in a separate thread
 class PowerMonitor(threading.Thread):
@@ -136,7 +137,7 @@ class PowerMonitor(threading.Thread):
             # Get current GPU power usage and append it to the list
             power = sum(get_gpu_power_usage())
             self.power_readings.append(power)
-            time.sleep(0.0001)  # Wait before next reading
+            time.sleep(0.00001)  # Wait before next reading
 
     def stop(self):
         self.running = False  # Stop the monitoring loop
@@ -158,8 +159,12 @@ def get_gpu_power_usage():
         print(f"Error obtaining GPU power usage: {e}")
         return []
 
+# Number of warm-up iterations
+num_warmup_iterations = 4
+
 # Iterate over different configurations
 for i, config in enumerate(search_spaces):
+
     # Apply transformations to the model based on the configuration
     mg, _ = quantize_transform_pass(mg, config)
 
@@ -169,8 +174,9 @@ for i, config in enumerate(search_spaces):
     gpu_power_usages = []
     accs, losses = [], []
     
-    # Iterate over batches in the training data
+# Iterate over batches in the training data
     for j, inputs in enumerate(data_module.train_dataloader()):
+
         # Break the loop after processing the specified number of batches
         if j >= num_batchs:
             break
@@ -225,30 +231,36 @@ for i, config in enumerate(search_spaces):
     recall_metric.reset()
     f1_metric.reset()
 
-    # Calculate and record average metrics for the current configuration
-    acc_avg = sum(accs) / len(accs)
-    loss_avg = sum(losses) / len(losses)
-    recorded_accs.append(acc_avg)
-    avg_latency = sum(latencies) / len(latencies)
-    avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
+    if i <= num_warmup_iterations:
+        continue
+    else:
+        # Calculate and record average metrics for the current configuration
+        acc_avg = sum(accs) / len(accs)
+        loss_avg = sum(losses) / len(losses)
+        recorded_accs.append(acc_avg)
+        avg_latency = sum(latencies) / len(latencies)
+        avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
+        avg_gpu_energy_usage = avg_gpu_power_usage * avg_latency / 1000
 
-    # Print the average metrics for the current configuration
-    print(f"Configuration {i}:")
-    print(f"Average Accuracy: {acc_avg}")
-    print(f"Average Precision: {avg_precision}")
-    print(f"Average Recall: {avg_recall}")
-    print(f"Average F1 Score: {avg_f1}")
-    print(f"Average Loss: {loss_avg}")
-    print(f"Average Latency: {avg_latency} milliseconds")
-    print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
-
-    all_accs.append(acc_avg)
-    all_precisions.append(avg_precision.item())
-    all_recalls.append(avg_recall.item())
-    all_f1s.append(avg_f1.item())
-    all_losses.append(loss_avg)
-    all_latencies.append(avg_latency)
-    all_gpu_powers.append(avg_gpu_power_usage)
+        # Print the average metrics for the current configuration
+        print(f"Configuration {i-num_warmup_iterations}:")
+        print(f"Average Accuracy: {acc_avg}")
+        print(f"Average Precision: {avg_precision}")
+        print(f"Average Recall: {avg_recall}")
+        print(f"Average F1 Score: {avg_f1}")
+        print(f"Average Loss: {loss_avg}")
+        print(f"Average Latency: {avg_latency} milliseconds")
+        print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
+        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} KW/hr")
+        
+        all_accs.append(acc_avg)
+        all_precisions.append(avg_precision.item())
+        all_recalls.append(avg_recall.item())
+        all_f1s.append(avg_f1.item())
+        all_losses.append(loss_avg)
+        all_latencies.append(avg_latency)
+        all_gpu_powers.append(avg_gpu_power_usage)
+        all_gpu_energy.append(avg_gpu_energy_usage)
 
 import matplotlib.pyplot as plt
 
@@ -261,49 +273,56 @@ plt.figure(figsize=(15, 10))
 # Accuracy
 plt.subplot(3, 3, 1)
 plt.plot(configurations, all_accs, marker='o', color='blue', label='Accuracy')
-plt.title('Accuracy per Configuration')
+plt.title('Accuracy')
 plt.xlabel('Configuration')
 plt.ylabel('Accuracy')
 
 # Loss
 plt.subplot(3, 3, 2)
 plt.plot(configurations, all_losses, marker='o', color='magenta', label='Loss')
-plt.title('Loss per Configuration')
+plt.title('Loss')
 plt.xlabel('Configuration')
 plt.ylabel('Loss')
 
 # Precision
 plt.subplot(3, 3, 3)
 plt.plot(configurations, all_precisions, marker='o', color='red', label='Precision')
-plt.title('Precision per Configuration')
+plt.title('Precision')
 plt.xlabel('Configuration')
 plt.ylabel('Precision')
 
 # Recall
 plt.subplot(3, 3, 4)
 plt.plot(configurations, all_recalls, marker='o', color='green', label='Recall')
-plt.title('Recall per Configuration')
+plt.title('Recall')
 plt.xlabel('Configuration')
 plt.ylabel('Recall')
 
 # F1 Score
 plt.subplot(3, 3, 5)
 plt.plot(configurations, all_f1s, marker='o', color='cyan', label='F1 Score')
-plt.title('F1 Score per Configuration')
+plt.title('F1 Score')
 plt.xlabel('Configuration')
 plt.ylabel('F1 Score')
 
 # Latency
 plt.subplot(3, 3, 6)
 plt.plot(configurations, all_latencies, marker='o', color='yellow', label='Latency')
-plt.title('Latency per Configuration')
+plt.title('Latency')
 plt.xlabel('Configuration')
 plt.ylabel('Latency (ms)')
 
 # GPU Power Usage
 plt.subplot(3, 3, 7)
 plt.plot(configurations, all_gpu_powers, marker='o', color='orange', label='GPU Power Usage')
-plt.title('GPU Power Usage per Configuration')
+plt.title('GPU Power Usage')
+plt.xlabel('Configuration')
+plt.ylabel('Power Usage (Watts)')
+
+# GPU Energy Usage
+plt.subplot(3, 3, 8)
+plt.plot(configurations, all_gpu_energy, marker='o', color='orange', label='GPU Power Usage')
+plt.title('GPU Energy Usage')
 plt.xlabel('Configuration')
 plt.ylabel('Power Usage (Watts)')
 
