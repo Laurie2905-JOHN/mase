@@ -1,9 +1,9 @@
-import torch
 
+import numpy as np
 
-def calculate_modules(module, in_data, out_data):
-    return 2
-    # # Collect computation statistics.
+def calculate_flops_pass():
+    return 'hello bitch'
+    # Collect computation statistics.
     # if isinstance(module, torch.nn.AdaptiveAvgPool2d):
     #     # One computation per input pixel - window size is chosen adaptively
     #     # and windows never overlap (?).

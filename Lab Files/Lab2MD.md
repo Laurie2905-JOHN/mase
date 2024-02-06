@@ -250,6 +250,7 @@ Entering the command:
 ./ch transform \--config configs/examples/jsc_toy_by_type.toml \--task
 
 The output is:
+``` python
 +-------------------------+--------------------------+--------------+-----------------+--------------------------+
 | Name                    |         Default          | Config. File | Manual Override |        Effective         |
 +-------------------------+--------------------------+--------------+-----------------+--------------------------+
@@ -303,7 +304,7 @@ INFO
 | x               | placeholder  |       1 |         0 |           1 |
 INFO     Saved mase graph to /home/laurie2905/mase/mase_output/jsc-tiny-TPE/software/transform/transformed_ckpt
 INFO     Transformation is completed
-
+``` 
 ### 8. \[Optional\] Write your own pass
 
 Many examples of existing passes are in the [source code](../..//machop/chop/passes/__init__.py), the [test files](../../machop/test/passes) for these passes also contain useful information on helping you to understand how these passes are used.

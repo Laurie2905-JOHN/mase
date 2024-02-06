@@ -122,7 +122,7 @@ precision_metric = torchmetrics.Precision(num_classes=5, average='weighted', tas
 recall_metric = torchmetrics.Recall(num_classes=5, average='weighted', task='multiclass')
 f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multiclass')
 
-num_batchs = 8
+num_batchs = 5
 
 # Define a class for monitoring GPU power in a separate thread
 class PowerMonitor(threading.Thread):
