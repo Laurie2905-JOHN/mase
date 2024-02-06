@@ -246,11 +246,63 @@ Original module: <class 'torch.nn.modules.linear.Linear'>, Old Non Quantized Wei
 The results show that the weights are quantized.
 ### 7.  Load your own pre-trained JSC network, and perform perform the quantisation using the command line interface.
 
-# your_dir/mase-tools/machop
-
-# enter the following command
-
+Entering the command:
 ./ch transform \--config configs/examples/jsc_toy_by_type.toml \--task
+
+The output is:
++-------------------------+--------------------------+--------------+-----------------+--------------------------+
+| Name                    |         Default          | Config. File | Manual Override |        Effective         |
++-------------------------+--------------------------+--------------+-----------------+--------------------------+
+| task                    |      classification      |     cls      |       cls       |           cls            |
+| load_name               |           None           |              |                 |           None           |
+| load_type               |            mz            |              |                 |            mz            |
+| batch_size              |           128            |     512      |                 |           512            |
+| to_debug                |          False           |              |                 |          False           |
+| log_level               |           info           |              |                 |           info           |
+| report_to               |       tensorboard        |              |                 |       tensorboard        |
+| seed                    |            0             |      42      |                 |            42            |
+| quant_config            |           None           |              |                 |           None           |
+| training_optimizer      |           adam           |              |                 |           adam           |
+| trainer_precision       |         16-mixed         |              |                 |         16-mixed         |
+| learning_rate           |          1e-05           |     0.01     |                 |           0.01           |
+| weight_decay            |            0             |              |                 |            0             |
+| max_epochs              |            20            |      5       |                 |            5             |
+| max_steps               |            -1            |              |                 |            -1            |
+| accumulate_grad_batches |            1             |              |                 |            1             |
+| log_every_n_steps       |            50            |      5       |                 |            5             |
+| num_workers             |            8             |              |        0        |            0             |
+| num_devices             |            1             |              |                 |            1             |
+| num_nodes               |            1             |              |                 |            1             |
+| accelerator             |           auto           |     gpu      |                 |           gpu            |
+| strategy                |           auto           |              |                 |           auto           |
+| is_to_auto_requeue      |          False           |              |                 |          False           |
+| github_ci               |          False           |              |                 |          False           |
+| disable_dataset_cache   |          False           |              |                 |          False           |
+| target                  |   xcu250-figd2104-2L-e   |              |                 |   xcu250-figd2104-2L-e   |
+| num_targets             |           100            |              |                 |           100            |
+| is_pretrained           |          False           |              |                 |          False           |
+| max_token_len           |           512            |              |                 |           512            |
+| project_dir             | /home/laurie2905/mase/ma |              |                 | /home/laurie2905/mase/ma |
+|                         |        se_output         |              |                 |        se_output         |
+| project                 |           None           | jsc-tiny-TPE |                 |       jsc-tiny-TPE       |
+| model                   |           None           |   jsc-tiny   |                 |         jsc-tiny         |
+| dataset                 |           None           |     jsc      |                 |           jsc            |
++-------------------------+--------------------------+--------------+-----------------+--------------------------+
+INFO     Initialising model 'jsc-tiny'...
+INFO     Initialising dataset 'jsc'...
+INFO     Project will be created at /home/laurie2905/mase/mase_output/jsc-tiny-TPE
+INFO     Transforming model 'jsc-tiny'...
+INFO     Quantized graph histogram:
+INFO     
+| Original type   | OP           |   Total |   Changed |   Unchanged |
+|-----------------+--------------+---------+-----------+-------------|
+| BatchNorm1d     | batch_norm1d |       1 |         0 |           1 |
+| Linear          | linear       |       1 |         1 |           0 |
+| ReLU            | relu         |       2 |         0 |           2 |
+| output          | output       |       1 |         0 |           1 |
+| x               | placeholder  |       1 |         0 |           1 |
+INFO     Saved mase graph to /home/laurie2905/mase/mase_output/jsc-tiny-TPE/software/transform/transformed_ckpt
+INFO     Transformation is completed
 
 ### 8. \[Optional\] Write your own pass
 
