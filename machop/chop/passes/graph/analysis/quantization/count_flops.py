@@ -2,140 +2,8 @@ import numpy as np
 import torch 
 
 def calculate_flops_pass(module, in_data, out_data):
-    # Collect computation statistics.
-    if isinstance(module, torch.nn.AdaptiveAvgPool2d):
-        assert len(in_data) == 1
-        input_size = in_data[0].numel()
-        output_size = out_data[0].numel()
-        computations = input_size
-        backward_computations = input_size
-        return {
-            "total_parameters": 0,
-            "computations": computations,
-            "backward_computations": backward_computations,
-            "input_buffer_size": input_size,
-            "output_buffer_size": output_size,
-        }
-
-    elif isinstance(module, torch.nn.Embedding):
-        total_parameters = module.embedding_dim * in_data[0].numel()
-        return {
-            "total_parameters": total_parameters,
-            "computations": 0,
-            "backward_computations": 0,
-            "input_buffer_size": 0,
-            "output_buffer_size": 0,
-        }
-    elif isinstance(module, torch.nn.AvgPool2d) or isinstance(
-        module, torch.nn.MaxPool2d
-    ):
-        # Each output pixel requires computations on a 2D window of input.
-        if type(module.kernel_size) == int:
-            window_size = module.kernel_size**2
-        else:
-            window_size = module.kernel_size[0] * module.kernel_size[1]
-
-        assert len(out_data) == 1
-        input_size = in_data[0].numel()
-        output_size = out_data[0].numel()
-        computations = output_size * window_size
-        backward_computations = input_size * window_size
-        return {
-            "total_parameters": 0,
-            "computations": computations,
-            "backward_computations": backward_computations,
-            "input_buffer_size": input_size,
-            "output_buffer_size": output_size,
-        }
-
-    elif isinstance(module, torch.nn.Conv2d):
-        assert len(in_data) == 1
-        _, channels, _, _ = in_data.size()
-        window_size = module.kernel_size[0] * module.kernel_size[1] * channels
-        assert len(out_data) == 1
-        input_size = in_data[0].numel()
-        output_size = out_data[0].numel()
-
-        computations = output_size * window_size
-        backward_computations = input_size * window_size * 2
-        return {
-            "total_parameters": module.weight.numel(),
-            "computations": computations,
-            "backward_computations": backward_computations,
-            "input_buffer_size": input_size,
-            "output_buffer_size": output_size,
-        }
-
-    elif isinstance(module, torch.nn.Dropout2d) or isinstance(
-        module, torch.nn.modules.dropout.Dropout
-    ):
-        return {
-            "total_parameters": 0,
-            "computations": 0,
-            "backward_computations": 0,
-            "input_buffer_size": in_data[0].numel(),
-            "output_buffer_size": out_data[0].numel(),
-        }
-
-    elif isinstance(module, torch.nn.Linear):
-        assert len(in_data) == 1
-        batch = in_data[0].numel() / in_data[0].shape[-1]
-
-        computations = module.weight.numel() * batch
-        backward_computations = module.weight.numel() * batch * 2
-        input_size = in_data[0].numel()
-        output_size = out_data[0].numel()
-        return {
-            "total_parameters": module.weight.numel(),
-            "computations": computations,
-            "backward_computations": backward_computations,
-            "input_buffer_size": input_size,
-            "output_buffer_size": output_size,
-        }
-
-    elif isinstance(module, torch.nn.modules.activation.ReLU) or isinstance(
-        module, torch.nn.modules.activation.ReLU6
-    ):
-        return {
-            "total_parameters": 0,
-            "computations": in_data[0].numel(),
-            "backward_computations": in_data[0].numel(),
-            "input_buffer_size": in_data[0].numel(),
-            "output_buffer_size": out_data[0].numel(),
-        }
-
-    elif isinstance(module, torch.nn.LayerNorm):
-        return {
-            "total_parameters": 0,
-            "computations": in_data[0].numel() * 5,
-            "backward_computations": in_data[0].numel() * 5,
-            "input_buffer_size": in_data[0].numel(),
-            "output_buffer_size": out_data[0].numel(),
-        }
-
-    elif isinstance(module, torch.nn.modules.batchnorm.BatchNorm2d)  or isinstance(
-        module, torch.nn.modules.batchnorm.BatchNorm1d):
-
-        total_parameters = 2 * module.num_features
-
-        computations = 4 * in_data[0].numel()
-        backward_computations = 4 * in_data[0].numel()
-        return {
-            "total_parameters": total_parameters,
-            "computations": computations,
-            "backward_computations": backward_computations,
-            "input_buffer_size": in_data[0].numel(),
-            "output_buffer_size": out_data[0].numel(),
-        }
-    else:
-        print("Unsupported module type for analysis:", type(module))
-
-import numpy as np
-import torch 
-
-def calculate_flops_pass(module, in_data, out_data):
     """
-    Calculates computational statistics for a given PyTorch module.
+    Calculates FLOPs for a given PyTorch module.
     
     Args:
         module: The PyTorch module to analyze.
@@ -156,7 +24,7 @@ def calculate_flops_pass(module, in_data, out_data):
         output_size = out_data[0].numel()  
         # Computations are equal to the number of input elements since it averages over spatial dimensions
         computations = input_size  
-        backward_computations = input_size  # Backward pass computations are assumed to be equal to forward pass for simplicity
+        backward_computations = input_size  # Backward pass computations equal to forward pass
         # Return a dictionary summarizing the computational cost
         return {
             "total_parameters": 0,  # No learnable parameters in AdaptiveAvgPool2d
@@ -170,13 +38,12 @@ def calculate_flops_pass(module, in_data, out_data):
     elif isinstance(module, torch.nn.Embedding):
         # Total learnable parameters are the product of embedding dimensions and number of embeddings
         total_parameters = module.embedding_dim * module.num_embeddings  
-        # Embedding layer does not perform "computations" in the traditional sense (no FLOPs for lookup)
         return {
             "total_parameters": total_parameters,
             "computations": 0,
             "backward_computations": 0,
-            "input_buffer_size": 0,  # Input is indices, not used in FLOPs calculation
-            "output_buffer_size": 0,  # Output size not directly related to computation cost
+            "input_buffer_size": 0,  
+            "output_buffer_size": 0,
         }
 
     # Handle Average Pooling 2D and Max Pooling 2D layers
@@ -186,9 +53,9 @@ def calculate_flops_pass(module, in_data, out_data):
         assert len(out_data) == 1  # Ensure single output tensor
         input_size = in_data[0].numel()
         output_size = out_data[0].numel()
-        # For pooling layers, each output element involves computations over the window size of input elements
+        # For  pooling layers, each output element involves computations over the window size of input elements
         computations = output_size * window_size
-        backward_computations = input_size * window_size  # Simplified assumption for backward computations
+        backward_computations = input_size * window_size
         return {
             "total_parameters": 0,  # Pooling layers have no learnable parameters
             "computations": computations,
@@ -206,7 +73,7 @@ def calculate_flops_pass(module, in_data, out_data):
         output_size = out_data[0].numel()
         # Computations for a Conv2d layer involve multiplying the window size by the number of output elements
         computations = output_size * window_size
-        backward_computations = input_size * window_size * 2  # Backward pass computations are assumed to be double of forward pass
+        backward_computations = input_size * window_size * 2  # Backward pass computations are double of forward pass
         return {
             "total_parameters": module.weight.numel(),  # Only weight parameters, bias excluded for simplicity
             "computations": computations,
