@@ -27,10 +27,13 @@ https://www.washington.edu/news/2023/07/27/how-much-energy-does-chatgpt-use/
 Metrics Implemented:
 
 - GPU energy consumption
-- Precision, Recall and F1 Score 
+- Precision
+- Recall
+- F1 Score
 - Latency
 
-Reviewing figure 1 we see that GPU power is relatively constant 
+Reviewing figure 1, we observe that GPU power is relatively constant. In the developed system, GPU power measurement is executed through a threading-based approach, enabling the concurrent monitoring of GPU power usage alongside other computational tasks, such as model inference. However, the relatively short latency of the model's execution presents a significant challenge for capturing accurate and continuous power measurements. This difficulty arises primarily due to the sampling frequency limitations imposed by the utilized monitoring package (pynvml), which may not be sufficiently high to capture detailed power usage data. However, this approach could yield more accurate results in scenarios with longer inference durations or during the model training phases, where the extended periods provide a better opportunity for detailed power consumption analysis.
+
 ![Description of image](TPE_vs_Brute.png)
 *Figure 1: Performance Analysis of Different Quantization Configurations in the Model*
 
@@ -83,7 +86,7 @@ TPE-Based Search: 18.01 seconds
 
 This result doesn't necessarily mean that there is no difference in sample efficiency between the two samplers. As discussed, the TPE sampler intelligently selects the hyperparameter space, so the TPESampler is more useful when dealing with a large and complex hyperparameter space where an exhaustive search is impractical or computationally expensive. In the search space defined in the original TOML file, the total number of possible combinations is small, being only 18. With a small number of combinations, the advanced probabilistic modeling of the TPESampler will not provide significant advantages over the complete search that the BruteForceSampler offers.
 
-However, expanding the search space to an infeasible number of computations for brute force to try every combination, Figure 2 shows that TPE intelligently selects a hyperparameter set that it thinks will provide optimum results early on. As the brute force approach never finds this combination in the allotted number of trials, this demonstrates where TPE can be advantageous.
+Expanding the search space to an infeasible number of computations makes it impossible for the BruteForce sampler to try all combinations. By logging and plotting the results using Lab3TPEGraph.py, as shown in Figure 2, it becomes evident that the TPE sampler selects a hyperparameter set that yields optimum results early on. In comparison, the brute force approach fails to find this combination within the allotted number of trials, demonstrating the TPE's advantage when dealing with a significant search space.
 
 ![Description of image](TPE_vs_Brute.png)
 *Figure 2: Evaluating the Performance of Tree-structured Parzen Estimator (TPE) Versus Brute Force Method in Hyperparameter Sampling*

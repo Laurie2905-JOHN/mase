@@ -1,5 +1,6 @@
 import numpy as np
 import torch 
+from chop.passes.graph.utils import get_node_actual_target
 
 def calculate_flops_pass(module, in_data, out_data):
     """
@@ -159,3 +160,49 @@ def calculate_flops_pass(module, in_data, out_data):
     else:
         # Print a message for unsupported module types. Custom layers or specific types not handled here will fall into this case.
         print("Unsupported module type for analysis:", type(module))
+        
+def calculate_flops_mg_pass(mase_graph):
+    """
+    Calculates the FLOPs (Floating Point Operations) for each module in a MaseGraph.
+
+    Args:
+        mase_graph (MaseGraph): The graph representing the model for which FLOPs are calculated.
+
+    Returns:
+        tuple: The original graph and a dictionary containing the FLOPs calculation breakdown and total FLOPs.
+    """
+    # Dictionary to store FLOPs calculation for each module
+    flops_breakdown = {}
+    # Initialize total FLOPs count
+    total_flops = 0
+    
+    # Iterate through each node in the MaseGraph
+    for node in mase_graph.fx_graph.nodes:
+        try:
+            # Try to extract input data shape from node metadata
+            input_data_shape = (node.meta['mase'].parameters['common']['args']['data_in_0']['value'],)
+        except KeyError:
+            # If input data shape is not found, set it as None
+            input_data_shape = (None,)
+        
+        # Extract output data shape from node metadata
+        output_data_shape = (node.meta['mase'].parameters['common']['results']['data_out_0']['value'],)
+
+        # Get the actual PyTorch module associated with the node
+        module = get_node_actual_target(node)
+        
+        # Check if the node is a PyTorch module to calculate FLOPs
+        if isinstance(module, torch.nn.Module):
+            # Calculate FLOPs for the module
+            module_flops = calculate_flops_pass(module, input_data_shape, output_data_shape)
+            # Store module FLOPs in the breakdown dictionary
+            flops_breakdown[module] = module_flops
+            # Accumulate total FLOPs
+            total_flops += module_flops['computations']
+
+    # Print FLOPs calculation breakdown and total FLOPs
+    # print("FLOPs Calculation Breakdown: ", flops_breakdown)
+    # print("\nTotal FLOPs: ", total_flops)
+
+    # Return the original graph and FLOPs calculation results
+    return mase_graph, {"flop_module_breakdown": flops_breakdown, "total_flops": total_flops}

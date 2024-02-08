@@ -1,3 +1,4 @@
 from .calculate_avg_bits import calculate_avg_bits_mg_analysis_pass
 from .count_flops import calculate_flops_pass
+from .count_flops import calculate_flops_mg_pass
 # from .calculate_bitOPS_model_size import calculate_avg_bits_mg_analysis_pass

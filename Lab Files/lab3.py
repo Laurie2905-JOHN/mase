@@ -1,14 +1,32 @@
+import os
+# Change the current working directory to the parent directory and then into 'machop'
+# os.chdir('../machop')
+
 import sys
 import logging 
 import os
 from pathlib import Path
 from pprint import pprint as pp
 import time
+import pynvml
+import threading
+import time
+import torch
+from torchmetrics.classification import MulticlassAccuracy
+from chop.passes.graph.transforms import quantize_transform_pass
+import subprocess
+import torchmetrics
+import numpy as np
+import torch
+from chop.ir.graph.mase_graph import MaseGraph
+from chop.passes.graph.utils import get_node_actual_target
+from chop.passes.graph.analysis.quantization import calculate_flops_pass, calculate_flops_mg_pass
+
 # cd machop
-# figure out the correct path
-machop_path = Path(".").resolve().parent /"machop"
-assert machop_path.exists(), "Failed to find machop at: {}".format(machop_path)
-sys.path.append(str(machop_path))
+# # figure out the correct path
+# machop_path = Path(".").resolve().parent /"machop"
+# assert machop_path.exists(), "Failed to find machop at: {}".format(machop_path)
+# sys.path.append(str(machop_path))
 
 from chop.dataset import MaseDataModule, get_dataset_info
 from chop.tools.logger import get_logger
@@ -86,7 +104,7 @@ pass_args = {
 },}
 
 all_accs, all_precisions, all_recalls, all_f1s = [], [], [], []
-all_losses, all_latencies, all_gpu_powers, all_gpu_energy = [], [], [], []
+all_losses, all_latencies, all_gpu_powers, all_gpu_energy, all_flops = [], [], [], [], []
 
 import copy
 # Added another (16, 8) config to add 4 warm up configs 
@@ -104,14 +122,7 @@ for d_config in data_in_frac_widths:
         # in fact, only primitive data types in python are doing implicit copy when a = b happens
         search_spaces.append(copy.deepcopy(pass_args))
 
-import torch
-from torchmetrics.classification import MulticlassAccuracy
-from chop.passes.graph.transforms import quantize_transform_pass
-import subprocess
-import threading
-import time
-import torchmetrics
-import numpy as np
+
 mg, _ = init_metadata_analysis_pass(mg, None)
 mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
 mg, _ = add_software_metadata_analysis_pass(mg, None)
@@ -124,20 +135,25 @@ f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multic
 
 num_batchs = 5
 
-# Define a class for monitoring GPU power in a separate thread
+# Initialize the NVIDIA Management Library (NVML)
+pynvml.nvmlInit()
+
+# Define a class for monitoring GPU power in a separate thread using pynvml
 class PowerMonitor(threading.Thread):
     def __init__(self):
         super().__init__()
         self.power_readings = []  # List to store power readings
         self.running = False      # Flag to control the monitoring loop
+        self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # Assume using GPU 0
 
     def run(self):
         self.running = True
         while self.running:
-            # Get current GPU power usage and append it to the list
-            power = sum(get_gpu_power_usage())
-            self.power_readings.append(power)
-            time.sleep(0.00001)  # Wait before next reading
+            # Get current GPU power usage in milliwatts and convert to watts
+            power_mW = pynvml.nvmlDeviceGetPowerUsage(self.handle)
+            power_W = power_mW / 1000.0
+            self.power_readings.append(power_W)
+            time.sleep(0.001)  # Wait before next reading
 
     def stop(self):
         self.running = False  # Stop the monitoring loop
@@ -146,18 +162,20 @@ class PowerMonitor(threading.Thread):
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
 
-# Function to get current GPU power usage using NVIDIA System Management Interface
-def get_gpu_power_usage():
-    try:
-        # Execute nvidia-smi command to get power usage
-        smi_output = subprocess.check_output(['nvidia-smi', '--query-gpu=power.draw', '--format=csv,noheader,nounits']).decode().strip()
-        # Convert power usage output to a list of floats
-        power_usage = [float(x) for x in smi_output.split('\n')]
-        return power_usage
-    except Exception as e:
-        # Handle exceptions (like nvidia-smi not found)
-        print(f"Error obtaining GPU power usage: {e}")
-        return []
+
+# Tested this method as well, but results are poor
+# # Function to get current GPU power usage using NVIDIA System Management Interface
+# def get_gpu_power_usage():
+#     try:
+#         # Execute nvidia-smi command to get power usage
+#         smi_output = subprocess.check_output(['nvidia-smi', '--query-gpu=power.draw', '--format=csv,noheader,nounits']).decode().strip()
+#         # Convert power usage output to a list of floats
+#         power_usage = [float(x) for x in smi_output.split('\n')]
+#         return power_usage
+#     except Exception as e:
+#         # Handle exceptions (like nvidia-smi not found)
+#         print(f"Error obtaining GPU power usage: {e}")
+#         return []
 
 # Number of warm-up iterations
 num_warmup_iterations = 4
@@ -173,6 +191,7 @@ for i, config in enumerate(search_spaces):
     latencies = []
     gpu_power_usages = []
     accs, losses = [], []
+    flops = []
     
 # Iterate over batches in the training data
     for j, inputs in enumerate(data_module.train_dataloader()):
@@ -204,17 +223,19 @@ for i, config in enumerate(search_spaces):
         # Stop the power monitor and calculate average power
         power_monitor.stop()
         power_monitor.join()  # Ensure monitoring thread has finished
-        avg_power = sum(power_monitor.power_readings) / len(power_monitor.power_readings)
-
+        avg_power = sum(power_monitor.power_readings) / len(power_monitor.power_readings) if power_monitor.power_readings else 0
         # Store the calculated average power
         gpu_power_usages.append(avg_power)
+        
+        data = calculate_flops_mg_pass(mg)
+        
 
         # Calculate accuracy and loss for the batch
         loss = torch.nn.functional.cross_entropy(preds, ys)
         acc = metric(preds, ys)
         accs.append(acc)
         losses.append(loss.item())
-
+        flops.append(data[1]['total_flops'])
         # Update torchmetrics metrics
         preds_labels = torch.argmax(preds, dim=1)
         precision_metric(preds_labels, ys)
@@ -225,12 +246,15 @@ for i, config in enumerate(search_spaces):
     avg_precision = precision_metric.compute()
     avg_recall = recall_metric.compute()
     avg_f1 = f1_metric.compute()
-
+    
+    # Compute to get correct dimensions
+    avg_flops = sum(flops) / len(flops)
+    
     # Reset metrics for the next configuration
     precision_metric.reset()
     recall_metric.reset()
     f1_metric.reset()
-
+    
     if i <= num_warmup_iterations:
         continue
     else:
@@ -241,7 +265,7 @@ for i, config in enumerate(search_spaces):
         avg_latency = sum(latencies) / len(latencies)
         avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
         avg_gpu_energy_usage = avg_gpu_power_usage * avg_latency / 1000
-
+        
         # Print the average metrics for the current configuration
         print(f"Configuration {i-num_warmup_iterations}:")
         print(f"Average Accuracy: {acc_avg}")
@@ -252,6 +276,7 @@ for i, config in enumerate(search_spaces):
         print(f"Average Latency: {avg_latency} milliseconds")
         print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
         print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} KW/hr")
+        print(f"FLOPs: {avg_flops}")
         
         all_accs.append(acc_avg)
         all_precisions.append(avg_precision.item())
@@ -261,6 +286,7 @@ for i, config in enumerate(search_spaces):
         all_latencies.append(avg_latency)
         all_gpu_powers.append(avg_gpu_power_usage)
         all_gpu_energy.append(avg_gpu_energy_usage)
+        all_flops.append(avg_flops)
 
 import matplotlib.pyplot as plt
 
@@ -272,57 +298,64 @@ plt.figure(figsize=(15, 10))
 
 # Accuracy
 plt.subplot(3, 3, 1)
-plt.plot(configurations, all_accs, marker='o', color='blue', label='Accuracy')
+plt.plot(configurations, all_accs, marker='o', color='black', label='Accuracy')
 plt.title('Accuracy')
 plt.xlabel('Configuration')
 plt.ylabel('Accuracy')
 
 # Loss
 plt.subplot(3, 3, 2)
-plt.plot(configurations, all_losses, marker='o', color='magenta', label='Loss')
+plt.plot(configurations, all_losses, marker='o', color='black', label='Loss')
 plt.title('Loss')
 plt.xlabel('Configuration')
 plt.ylabel('Loss')
 
 # Precision
 plt.subplot(3, 3, 3)
-plt.plot(configurations, all_precisions, marker='o', color='red', label='Precision')
+plt.plot(configurations, all_precisions, marker='o', color='black', label='Precision')
 plt.title('Precision')
 plt.xlabel('Configuration')
 plt.ylabel('Precision')
 
 # Recall
 plt.subplot(3, 3, 4)
-plt.plot(configurations, all_recalls, marker='o', color='green', label='Recall')
+plt.plot(configurations, all_recalls, marker='o', color='black', label='Recall')
 plt.title('Recall')
 plt.xlabel('Configuration')
 plt.ylabel('Recall')
 
 # F1 Score
 plt.subplot(3, 3, 5)
-plt.plot(configurations, all_f1s, marker='o', color='cyan', label='F1 Score')
+plt.plot(configurations, all_f1s, marker='o', color='black', label='F1 Score')
 plt.title('F1 Score')
 plt.xlabel('Configuration')
 plt.ylabel('F1 Score')
 
 # Latency
 plt.subplot(3, 3, 6)
-plt.plot(configurations, all_latencies, marker='o', color='yellow', label='Latency')
+plt.plot(configurations, all_latencies, marker='o', color='black', label='Latency')
 plt.title('Latency')
 plt.xlabel('Configuration')
 plt.ylabel('Latency (ms)')
 
 # GPU Power Usage
 plt.subplot(3, 3, 7)
-plt.plot(configurations, all_gpu_powers, marker='o', color='orange', label='GPU Power Usage')
+plt.plot(configurations, all_gpu_powers, marker='o', color='black', label='GPU Power Usage')
 plt.title('GPU Power Usage')
 plt.xlabel('Configuration')
 plt.ylabel('Power Usage (Watts)')
 
 # GPU Energy Usage
 plt.subplot(3, 3, 8)
-plt.plot(configurations, all_gpu_energy, marker='o', color='orange', label='GPU Power Usage')
+plt.plot(configurations, all_gpu_energy, marker='o', color='black', label='GPU Power Usage')
 plt.title('GPU Energy Usage')
+plt.xlabel('Configuration')
+plt.ylabel('Power Usage (Watts)')
+
+# FLOPs
+plt.subplot(3, 3, 9)
+plt.plot(configurations, all_flops, marker='o', color='black', label='FLOPs')
+plt.title('Total FLOPs')
 plt.xlabel('Configuration')
 plt.ylabel('Power Usage (Watts)')
 
@@ -331,4 +364,3 @@ plt.tight_layout()
 
 # Show the plot
 plt.show()
-
