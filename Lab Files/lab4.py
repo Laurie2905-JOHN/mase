@@ -1,13 +1,9 @@
-import sys
 import logging
-import os
 from pathlib import Path
 from pprint import pprint as pp
 from chop.passes.graph import report_graph_analysis_pass
-
 from chop.dataset import MaseDataModule, get_dataset_info
 from chop.tools.logger import set_logging_verbosity, get_logger
-
 from chop.passes.graph.analysis import (
     report_node_meta_param_analysis_pass,
     profile_statistics_analysis_pass,
@@ -21,12 +17,6 @@ from chop.tools.get_input import InputGenerator
 from chop.ir.graph.mase_graph import MaseGraph
 
 from chop.models import get_model_info, get_model
-
-import os
-# Change the current working directory to the parent directory and then into 'machop'
-# os.chdir('../machop')
-
-import sys
 import logging 
 import os
 from pathlib import Path
@@ -37,10 +27,7 @@ import threading
 import time
 import torch
 from torchmetrics.classification import MulticlassAccuracy
-from chop.passes.graph.transforms import quantize_transform_pass
-import subprocess
 import torchmetrics
-import numpy as np
 import torch
 from chop.ir.graph.mase_graph import MaseGraph
 from chop.passes.graph.utils import get_node_actual_target
@@ -51,7 +38,7 @@ set_logging_verbosity("info")
 logger = get_logger("chop")
 logger.setLevel(logging.INFO)
 
-batch_size = 8
+batch_size = 512
 model_name = "jsc-tiny"
 dataset_name = "jsc"
 
@@ -139,7 +126,15 @@ def redefine_linear_transform_pass(graph, pass_args=None):
     return graph, {}
 
 
-# define a new model
+'''
+
+
+Question 1
+
+
+'''
+
+# Define the new model
 class JSC_Three_Linear_Layers(nn.Module):
     def __init__(self):
         super(JSC_Three_Linear_Layers, self).__init__()
@@ -156,8 +151,12 @@ class JSC_Three_Linear_Layers(nn.Module):
  
     def forward(self, x):
         return self.seq_blocks(x)
-    
 
+# Create MaseGraph from the model
+model = JSC_Three_Linear_Layers()
+mg = MaseGraph(model)
+
+# Define the pass_configs
 pass_config = {
 "by": "name",
 "default": {"config": {"name": None}},
@@ -182,21 +181,50 @@ pass_config = {
     },
 }
 
-model = JSC_Three_Linear_Layers()
-  
-mg = MaseGraph(model=model)
-
+# Print the original graph
 print("Original Graph:")
 for block in mg.model.seq_blocks._modules:
-  print(f"Block number {block}: {mg.model.seq_blocks._modules[block]}")
+  print(f"Module number {block}: {mg.model.seq_blocks._modules[block]}")
 
-# this performs the architecture transformation based on the config
+# Perform the transformation on the model using the pass_config dictionary
 mg, _ = redefine_linear_transform_pass(
     graph=mg, pass_args={"config": pass_config})
 
+# Print the transformed graph
 print("Transformed Graph:")
 for block in mg.model.seq_blocks._modules:
-  print(f"Block number {block}: {mg.model.seq_blocks._modules[block]}")
+  print(f"Module number {block}: {mg.model.seq_blocks._modules[block]}")
+
+'''
+
+Question 2
+
+'''
+
+from chop.actions import train, test
+logger = logging.getLogger(__name__)
+
+task = "channel_multiplier"
+dataset_name = "jsc"
+optimizer = "adam"
+max_epochs: int = 2
+max_steps: int = -1
+gradient_accumulation_steps: int = 1
+learning_rate: float = 5e-3
+weight_decay: float = 0.0
+lr_scheduler_type: str = "linear"
+num_warmup_steps: int = 0
+save_path: str = "../mase_output/channel_mod"
+auto_requeue = False
+load_name: str = None
+load_type: str = ""
+evaluate_before_training: bool = False
+visualizer = None
+profile: bool = True
+plt_trainer_args = {
+"max_epochs": max_epochs,
+"accelerator": "gpu",
+}
 
 
 all_accs, all_precisions, all_recalls, all_f1s = [], [], [], []
@@ -213,7 +241,7 @@ precision_metric = torchmetrics.Precision(num_classes=5, average='weighted', tas
 recall_metric = torchmetrics.Recall(num_classes=5, average='weighted', task='multiclass')
 f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multiclass')
 
-num_batchs = 5
+
 
 # Initialize the NVIDIA Management Library (NVML)
 pynvml.nvmlInit()
@@ -268,7 +296,9 @@ pass_config = {
 
 
 import copy
-channel_multiplier = [1, 1, 1 ,1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+# channel_multiplier = [2, 1, 1 ,1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+channel_multiplier = [2]
+num_batchs = 1
 search_spaces = []
 for d_config in channel_multiplier:
     pass_config['seq_blocks_2']["config"]["channel_multiplier"] = d_config
@@ -276,9 +306,9 @@ for d_config in channel_multiplier:
     pass_config['seq_blocks_6']["config"]["channel_multiplier"] = d_config
     search_spaces.append(copy.deepcopy(pass_config))
         
-
+eval = False
 # # Number of warm-up iterations
-num_warmup_iterations = 4
+num_warmup_iterations = 0
 
 # Iterate over different configurations
 for i, config in enumerate(search_spaces):
@@ -313,11 +343,20 @@ for i, config in enumerate(search_spaces):
         power_monitor.start()
 
         torch.cuda.empty_cache()
-        # Record start time of the model prediction
-        start.record()
-        preds = mg.model(xs)  # Run model prediction
-        end.record()          # Record end time
-
+        
+        if eval:
+            # Record start time of the model prediction
+            start.record()
+            preds = mg.model(xs)  # Run model prediction
+            end.record()          # Record end time
+        else:
+            start.record()
+            train(mg.model, model_info, data_module, data_module.dataset_info,
+                task, optimizer, learning_rate, weight_decay, plt_trainer_args,
+                auto_requeue, save_path, visualizer, load_name, load_type)
+            preds = mg.model(xs)  # Run model prediction
+            end.record()          # Record end time
+            
         # Synchronize to ensure all GPU operations are finished
         torch.cuda.synchronize()
 
@@ -369,7 +408,7 @@ for i, config in enumerate(search_spaces):
         recorded_accs.append(acc_avg)
         avg_latency = sum(latencies) / len(latencies)
         avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
-        avg_gpu_energy_usage = avg_gpu_power_usage * avg_latency / 1000
+        avg_gpu_energy_usage = (avg_gpu_power_usage / 1000) * avg_latency / (1000*3600)
         
         # Print the average metrics for the current configuration
         print(f"Configuration {i-num_warmup_iterations}:")
@@ -378,9 +417,13 @@ for i, config in enumerate(search_spaces):
         print(f"Average Recall: {avg_recall}")
         print(f"Average F1 Score: {avg_f1}")
         print(f"Average Loss: {loss_avg}")
-        print(f"Average Latency: {avg_latency} milliseconds")
+        if eval:
+            print(f"Average Latency: {avg_latency} milliseconds")
+        else:
+            print(f"Average Training Time: {avg_latency/(1000*60)} minutes")
+
         print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
-        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} KW/hr")
+        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} kW/hr")
         print(f"FLOPs: {avg_flops}")
         
         all_accs.append(acc_avg)
@@ -439,9 +482,14 @@ plt.ylabel('F1 Score')
 # Latency
 plt.subplot(3, 3, 6)
 plt.plot(configurations, all_latencies, marker='o', color='black', label='Latency')
-plt.title('Latency')
+if eval:
+    plt.title('Latency')
+    plt.ylabel('Latency (ms)')
+else:
+    plt.title('Training Time')
+    plt.ylabel('Training Time (ms)')
 plt.xlabel('Configuration')
-plt.ylabel('Latency (ms)')
+
 
 # GPU Power Usage
 plt.subplot(3, 3, 7)
@@ -455,7 +503,7 @@ plt.subplot(3, 3, 8)
 plt.plot(configurations, all_gpu_energy, marker='o', color='black', label='GPU Power Usage')
 plt.title('GPU Energy Usage')
 plt.xlabel('Configuration')
-plt.ylabel('Power Usage (Watts)')
+plt.ylabel('Energy Usage (KW/hr)')
 
 # FLOPs
 plt.subplot(3, 3, 9)
@@ -470,7 +518,68 @@ plt.tight_layout()
 # Show the plot
 plt.show()
 
+'''
+
+Question 3
 
 
+'''
 
+def redefine_linear_transform(graph, transform_args=None):
+    config_main = transform_args
+    default_config = config_main.pop('default', None)
+    if default_config is None:
+        raise ValueError("default configuration must be provided.")
 
+    for index, node in enumerate(graph.fx_graph.nodes, start=1):
+            node_config = config_main.get(node.name, default_config)['config']
+            module_action = node_config.get("name")
+            
+            if module_action:
+                original_module = graph.modules[node.target]
+                in_features, out_features, bias = original_module.in_features, original_module.out_features, original_module.bias
+                
+                multiplier_in = node_config.get("channel_multiplier_in", 1)
+                multiplier_out = node_config.get("channel_multiplier_out", node_config.get("channel_multiplier", 1))
+                
+                if module_action == "output_only":
+                    out_features *= multiplier_out
+                elif module_action == "both":
+                    in_features *= multiplier_in
+                    out_features *= multiplier_out
+                elif module_action == "input_only":
+                    in_features *= multiplier_in
+                
+                new_module = instantiate_linear(in_features, out_features, bias)
+                parent_name, child_name = get_parent_name(node.target)
+                setattr(graph.modules[parent_name], child_name, new_module)
+        
+    return graph, {}
+
+# Example usage of the improved function with a simplified configuration
+transform_args = {
+    "by": "name",
+    "default": {"config": {"name": None}},
+    "seq_blocks_2": {"config": {"name": "output_only", "channel_multiplier_out": 2}},
+    "seq_blocks_4": {"config": {"name": "both", "channel_multiplier_in": 2, "channel_multiplier_out": 4}},
+    "seq_blocks_6": {"config": {"name": "input_only", "channel_multiplier_in": 4}},
+}
+
+model = JSC_Three_Linear_Layers()
+
+# generate the mase graph and initialize node metadata
+mg = MaseGraph(model=model)
+mg, _ = init_metadata_analysis_pass(mg, None)
+
+# Print the original graph
+print("Original Graph:")
+for block in mg.model.seq_blocks._modules:
+  print(f"Module number {block}: {mg.model.seq_blocks._modules[block]}")
+
+# Perform the transformation on the model using the pass_config dictionary
+redefine_linear_transform(mg, transform_args=transform_args)
+
+# Print the transformed graph
+print("Transformed Graph:")
+for block in mg.model.seq_blocks._modules:
+  print(f"Module number {block}: {mg.model.seq_blocks._modules[block]}")

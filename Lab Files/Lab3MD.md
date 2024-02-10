@@ -35,7 +35,11 @@ Metrics Implemented:
 
 Reviewing figure 1, we observe that GPU power is relatively constant. In the developed system, GPU power measurement is executed through a threading-based approach, enabling the concurrent monitoring of GPU power usage alongside other computational tasks, such as model inference. However, the relatively short latency of the model's execution presents a significant challenge for capturing accurate and continuous power measurements. This difficulty arises primarily due to the sampling frequency limitations imposed by the utilized monitoring package (pynvml), which may not be sufficiently high to capture detailed power usage data. However, this approach could yield more accurate results in scenarios with longer inference durations or during the model training phases, where the extended periods provide a better opportunity for detailed power consumption analysis.
 
-![Description of image](Metrics.png)
+It's interesting to note that FLOPs do not change with quantization because the number of mathematical operations remains the same despite quantization. If there was time, implementing an analysis of the number of Bit operations would likely show a change with quantization.
+
+Given that the quantization was applied to a small model with limited accuracy, the insights from the graph are somewhat constrained. However, these metrics could be valuable for analyzing more complex, trained neural networks in the future.
+
+![Description of image](Metrics3.png)
 *Figure 1: Metric Analysis of Different Quantization Configurations in the Model*
 
 ### 2.2.  It’s important to note that in this particular case, accuracy and loss actually serve as the same quality metric (do you know why?).

@@ -264,7 +264,7 @@ for i, config in enumerate(search_spaces):
         recorded_accs.append(acc_avg)
         avg_latency = sum(latencies) / len(latencies)
         avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
-        avg_gpu_energy_usage = avg_gpu_power_usage * avg_latency / 1000
+        avg_gpu_energy_usage = (avg_gpu_power_usage / 1000) * avg_latency / (1000*3600)
         
         # Print the average metrics for the current configuration
         print(f"Configuration {i-num_warmup_iterations}:")
@@ -275,7 +275,7 @@ for i, config in enumerate(search_spaces):
         print(f"Average Loss: {loss_avg}")
         print(f"Average Latency: {avg_latency} milliseconds")
         print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
-        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} KW/hr")
+        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} kW/hr")
         print(f"FLOPs: {avg_flops}")
         
         all_accs.append(acc_avg)
@@ -350,7 +350,7 @@ plt.subplot(3, 3, 8)
 plt.plot(configurations, all_gpu_energy, marker='o', color='black', label='GPU Power Usage')
 plt.title('GPU Energy Usage')
 plt.xlabel('Configuration')
-plt.ylabel('Power Usage (Watts)')
+plt.ylabel('Energy Usage (KW/hr)')
 
 # FLOPs
 plt.subplot(3, 3, 9)
