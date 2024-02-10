@@ -15,7 +15,7 @@ class SWRunnerBase:
         self.model_info = model_info
         self.task = task
         self.dataset_info = dataset_info
-        self.accelerator = accelerator
+        self.accelerator = accelerator 
 
         self.config = config
 

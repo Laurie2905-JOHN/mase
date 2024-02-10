@@ -86,7 +86,7 @@ _ = model(**dummy_in)
 mg = MaseGraph(model=model)
 
 pass_args = {
-"by": "type",
+"by": "name",
 "default": {"config": {"name": None}},
 "linear": {
         "config": {
@@ -255,7 +255,7 @@ for i, config in enumerate(search_spaces):
     recall_metric.reset()
     f1_metric.reset()
     
-    if i <= num_warmup_iterations:
+    if i < num_warmup_iterations:
         continue
     else:
         # Calculate and record average metrics for the current configuration
@@ -290,7 +290,7 @@ for i, config in enumerate(search_spaces):
 
 import matplotlib.pyplot as plt
 
-# Assuming you have a list of configurations
+# Create list of configurations
 configurations = [f'{i}' for i in range(len(all_accs))]
 
 # Plotting each metric in a separate line graph
@@ -357,7 +357,7 @@ plt.subplot(3, 3, 9)
 plt.plot(configurations, all_flops, marker='o', color='black', label='FLOPs')
 plt.title('Total FLOPs')
 plt.xlabel('Configuration')
-plt.ylabel('Power Usage (Watts)')
+plt.ylabel('Number of FLOPs')
 
 # Adjust layout for better readability
 plt.tight_layout()

@@ -3,11 +3,7 @@ import logging
 import os
 from pathlib import Path
 from pprint import pprint as pp
-
-# figure out the correct path
-machop_path = Path(".").resolve().parent.parent /"machop"
-assert machop_path.exists(), "Failed to find machop at: {}".format(machop_path)
-sys.path.append(str(machop_path))
+from chop.passes.graph import report_graph_analysis_pass
 
 from chop.dataset import MaseDataModule, get_dataset_info
 from chop.tools.logger import set_logging_verbosity, get_logger
@@ -25,6 +21,30 @@ from chop.tools.get_input import InputGenerator
 from chop.ir.graph.mase_graph import MaseGraph
 
 from chop.models import get_model_info, get_model
+
+import os
+# Change the current working directory to the parent directory and then into 'machop'
+# os.chdir('../machop')
+
+import sys
+import logging 
+import os
+from pathlib import Path
+from pprint import pprint as pp
+import time
+import pynvml
+import threading
+import time
+import torch
+from torchmetrics.classification import MulticlassAccuracy
+from chop.passes.graph.transforms import quantize_transform_pass
+import subprocess
+import torchmetrics
+import numpy as np
+import torch
+from chop.ir.graph.mase_graph import MaseGraph
+from chop.passes.graph.utils import get_node_actual_target
+from chop.passes.graph.analysis.quantization import calculate_flops_pass, calculate_flops_mg_pass
 
 set_logging_verbosity("info")
 
@@ -119,6 +139,24 @@ def redefine_linear_transform_pass(graph, pass_args=None):
     return graph, {}
 
 
+# define a new model
+class JSC_Three_Linear_Layers(nn.Module):
+    def __init__(self):
+        super(JSC_Three_Linear_Layers, self).__init__()
+        self.seq_blocks = nn.Sequential(
+            nn.BatchNorm1d(16),  # 0
+            nn.ReLU(16),  # 1
+            nn.Linear(16, 16),  # linear seq_2
+            nn.ReLU(16),  # 3
+            nn.Linear(16, 16),  # linear seq_4
+            nn.ReLU(16),  # 5
+            nn.Linear(16, 5),  # linear seq_6
+            nn.ReLU(5),  # 7
+        )
+ 
+    def forward(self, x):
+        return self.seq_blocks(x)
+    
 
 pass_config = {
 "by": "name",
@@ -130,13 +168,13 @@ pass_config = {
         "channel_multiplier": 2,
         }
     },
-"seq_blocks_3": {
+"seq_blocks_4": {
     "config": {
         "name": "both",
         "channel_multiplier": 2,
         }
     },
-"seq_blocks_4": {
+"seq_blocks_6": {
     "config": {
         "name": "input_only",
         "channel_multiplier": 2,
@@ -144,7 +182,295 @@ pass_config = {
     },
 }
 
+model = JSC_Three_Linear_Layers()
+  
+mg = MaseGraph(model=model)
+
+print("Original Graph:")
+for block in mg.model.seq_blocks._modules:
+  print(f"Block number {block}: {mg.model.seq_blocks._modules[block]}")
+
 # this performs the architecture transformation based on the config
 mg, _ = redefine_linear_transform_pass(
     graph=mg, pass_args={"config": pass_config})
+
+print("Transformed Graph:")
+for block in mg.model.seq_blocks._modules:
+  print(f"Block number {block}: {mg.model.seq_blocks._modules[block]}")
+
+
+all_accs, all_precisions, all_recalls, all_f1s = [], [], [], []
+all_losses, all_latencies, all_gpu_powers, all_gpu_energy, all_flops = [], [], [], [], []
+
+
+mg, _ = init_metadata_analysis_pass(mg, None)
+mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
+mg, _ = add_software_metadata_analysis_pass(mg, None)
+
+# Instantiate metrics with the specified task type
+metric = MulticlassAccuracy(num_classes=5)
+precision_metric = torchmetrics.Precision(num_classes=5, average='weighted', task='multiclass')
+recall_metric = torchmetrics.Recall(num_classes=5, average='weighted', task='multiclass')
+f1_metric = torchmetrics.F1Score(num_classes=5, average='weighted', task='multiclass')
+
+num_batchs = 5
+
+# Initialize the NVIDIA Management Library (NVML)
+pynvml.nvmlInit()
+
+# Define a class for monitoring GPU power in a separate thread using pynvml
+class PowerMonitor(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.power_readings = []  # List to store power readings
+        self.running = False      # Flag to control the monitoring loop
+        self.handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # Assume using GPU 0
+
+    def run(self):
+        self.running = True
+        while self.running:
+            # Get current GPU power usage in milliwatts and convert to watts
+            power_mW = pynvml.nvmlDeviceGetPowerUsage(self.handle)
+            power_W = power_mW / 1000.0
+            self.power_readings.append(power_W)
+            time.sleep(0.001)  # Wait before next reading
+
+    def stop(self):
+        self.running = False  # Stop the monitoring loop
+
+# Create CUDA events for timing GPU operations
+start = torch.cuda.Event(enable_timing=True)
+end = torch.cuda.Event(enable_timing=True)
+
+pass_config = {
+"by": "name",
+"default": {"config": {"name": None}},
+"seq_blocks_2": {
+    "config": {
+        "name": "output_only",
+        # weight
+        "channel_multiplier": 2,
+        }
+    },
+"seq_blocks_4": {
+    "config": {
+        "name": "both",
+        "channel_multiplier": 2,
+        }
+    },
+"seq_blocks_6": {
+    "config": {
+        "name": "input_only",
+        "channel_multiplier": 2,
+        }
+    },
+}
+
+
+import copy
+channel_multiplier = [1, 1, 1 ,1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+search_spaces = []
+for d_config in channel_multiplier:
+    pass_config['seq_blocks_2']["config"]["channel_multiplier"] = d_config
+    pass_config['seq_blocks_4']["config"]["channel_multiplier"] = d_config
+    pass_config['seq_blocks_6']["config"]["channel_multiplier"] = d_config
+    search_spaces.append(copy.deepcopy(pass_config))
+        
+
+# # Number of warm-up iterations
+num_warmup_iterations = 4
+
+# Iterate over different configurations
+for i, config in enumerate(search_spaces):
+    
+    mg = MaseGraph(model=model)
+    mg, _ = init_metadata_analysis_pass(mg, None)
+    mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
+    mg, _ = add_software_metadata_analysis_pass(mg, None)
+
+    # Apply transformations to the model based on the configuration
+    mg, _ = redefine_linear_transform_pass(mg, pass_args={"config": config})
+
+    # Initialize lists to store metrics for each configuration
+    recorded_accs = []
+    latencies = []
+    gpu_power_usages = []
+    accs, losses = [], []
+    flops = []
+    
+# Iterate over batches in the training data
+    for j, inputs in enumerate(data_module.train_dataloader()):
+
+        # Break the loop after processing the specified number of batches
+        if j >= num_batchs:
+            break
+
+        # Unpack inputs and labels
+        xs, ys = inputs
+
+        # Instantiate and start the power monitor
+        power_monitor = PowerMonitor()
+        power_monitor.start()
+
+        torch.cuda.empty_cache()
+        # Record start time of the model prediction
+        start.record()
+        preds = mg.model(xs)  # Run model prediction
+        end.record()          # Record end time
+
+        # Synchronize to ensure all GPU operations are finished
+        torch.cuda.synchronize()
+
+        # Calculate latency between start and end events
+        latency = start.elapsed_time(end)
+        latencies.append(latency)
+        
+        # Stop the power monitor and calculate average power
+        power_monitor.stop()
+        power_monitor.join()  # Ensure monitoring thread has finished
+        avg_power = sum(power_monitor.power_readings) / len(power_monitor.power_readings) if power_monitor.power_readings else 0
+        # Store the calculated average power
+        gpu_power_usages.append(avg_power)
+        
+        data = calculate_flops_mg_pass(mg)
+        
+
+        # Calculate accuracy and loss for the batch
+        loss = torch.nn.functional.cross_entropy(preds, ys)
+        acc = metric(preds, ys)
+        accs.append(acc)
+        losses.append(loss.item())
+        flops.append(data[1]['total_flops'])
+        # Update torchmetrics metrics
+        preds_labels = torch.argmax(preds, dim=1)
+        precision_metric(preds_labels, ys)
+        recall_metric(preds_labels, ys)
+        f1_metric(preds_labels, ys)
+
+    # Compute final precision, recall, and F1 for this configuration
+    avg_precision = precision_metric.compute()
+    avg_recall = recall_metric.compute()
+    avg_f1 = f1_metric.compute()
+    
+    # Compute to get correct dimensions
+    avg_flops = sum(flops) / len(flops)
+    
+    # Reset metrics for the next configuration
+    precision_metric.reset()
+    recall_metric.reset()
+    f1_metric.reset()
+    
+    if i < num_warmup_iterations:
+        continue
+    else:
+            # Calculate and record average metrics for the current configuration
+        acc_avg = sum(accs) / len(accs)
+        loss_avg = sum(losses) / len(losses)
+        recorded_accs.append(acc_avg)
+        avg_latency = sum(latencies) / len(latencies)
+        avg_gpu_power_usage = sum(gpu_power_usages) / len(gpu_power_usages)
+        avg_gpu_energy_usage = avg_gpu_power_usage * avg_latency / 1000
+        
+        # Print the average metrics for the current configuration
+        print(f"Configuration {i-num_warmup_iterations}:")
+        print(f"Average Accuracy: {acc_avg}")
+        print(f"Average Precision: {avg_precision}")
+        print(f"Average Recall: {avg_recall}")
+        print(f"Average F1 Score: {avg_f1}")
+        print(f"Average Loss: {loss_avg}")
+        print(f"Average Latency: {avg_latency} milliseconds")
+        print(f"Average GPU Power Usage: {avg_gpu_power_usage} watts")
+        print(f"Average GPU Energy Usage: {avg_gpu_energy_usage} KW/hr")
+        print(f"FLOPs: {avg_flops}")
+        
+        all_accs.append(acc_avg)
+        all_precisions.append(avg_precision.item())
+        all_recalls.append(avg_recall.item())
+        all_f1s.append(avg_f1.item())
+        all_losses.append(loss_avg)
+        all_latencies.append(avg_latency)
+        all_gpu_powers.append(avg_gpu_power_usage)
+        all_gpu_energy.append(avg_gpu_energy_usage)
+        all_flops.append(avg_flops)
+
+import matplotlib.pyplot as plt
+
+# Assuming list of configurations
+configurations = [f'{i}' for i in range(len(all_accs))]
+
+# Plotting each metric in a separate line graph
+plt.figure(figsize=(15, 10))
+
+# Accuracy
+plt.subplot(3, 3, 1)
+plt.plot(configurations, all_accs, marker='o', color='black', label='Accuracy')
+plt.title('Accuracy')
+plt.xlabel('Configuration')
+plt.ylabel('Accuracy')
+
+# Loss
+plt.subplot(3, 3, 2)
+plt.plot(configurations, all_losses, marker='o', color='black', label='Loss')
+plt.title('Loss')
+plt.xlabel('Configuration')
+plt.ylabel('Loss')
+
+# Precision
+plt.subplot(3, 3, 3)
+plt.plot(configurations, all_precisions, marker='o', color='black', label='Precision')
+plt.title('Precision')
+plt.xlabel('Configuration')
+plt.ylabel('Precision')
+
+# Recall
+plt.subplot(3, 3, 4)
+plt.plot(configurations, all_recalls, marker='o', color='black', label='Recall')
+plt.title('Recall')
+plt.xlabel('Configuration')
+plt.ylabel('Recall')
+
+# F1 Score
+plt.subplot(3, 3, 5)
+plt.plot(configurations, all_f1s, marker='o', color='black', label='F1 Score')
+plt.title('F1 Score')
+plt.xlabel('Configuration')
+plt.ylabel('F1 Score')
+
+# Latency
+plt.subplot(3, 3, 6)
+plt.plot(configurations, all_latencies, marker='o', color='black', label='Latency')
+plt.title('Latency')
+plt.xlabel('Configuration')
+plt.ylabel('Latency (ms)')
+
+# GPU Power Usage
+plt.subplot(3, 3, 7)
+plt.plot(configurations, all_gpu_powers, marker='o', color='black', label='GPU Power Usage')
+plt.title('GPU Power Usage')
+plt.xlabel('Configuration')
+plt.ylabel('Power Usage (Watts)')
+
+# GPU Energy Usage
+plt.subplot(3, 3, 8)
+plt.plot(configurations, all_gpu_energy, marker='o', color='black', label='GPU Power Usage')
+plt.title('GPU Energy Usage')
+plt.xlabel('Configuration')
+plt.ylabel('Power Usage (Watts)')
+
+# FLOPs
+plt.subplot(3, 3, 9)
+plt.plot(configurations, all_flops, marker='o', color='black', label='FLOPs')
+plt.title('Total FLOPs')
+plt.xlabel('Configuration')
+plt.ylabel('Number of FLOPs')
+
+# Adjust layout for better readability
+plt.tight_layout()
+
+# Show the plot
+plt.show()
+
+
+
+
 

@@ -27,6 +27,7 @@ https://www.washington.edu/news/2023/07/27/how-much-energy-does-chatgpt-use/
 Metrics Implemented:
 
 - GPU energy consumption
+- FLOPs
 - Precision
 - Recall
 - F1 Score
@@ -34,8 +35,8 @@ Metrics Implemented:
 
 Reviewing figure 1, we observe that GPU power is relatively constant. In the developed system, GPU power measurement is executed through a threading-based approach, enabling the concurrent monitoring of GPU power usage alongside other computational tasks, such as model inference. However, the relatively short latency of the model's execution presents a significant challenge for capturing accurate and continuous power measurements. This difficulty arises primarily due to the sampling frequency limitations imposed by the utilized monitoring package (pynvml), which may not be sufficiently high to capture detailed power usage data. However, this approach could yield more accurate results in scenarios with longer inference durations or during the model training phases, where the extended periods provide a better opportunity for detailed power consumption analysis.
 
-![Description of image](TPE_vs_Brute.png)
-*Figure 1: Performance Analysis of Different Quantization Configurations in the Model*
+![Description of image](Metrics.png)
+*Figure 1: Metric Analysis of Different Quantization Configurations in the Model*
 
 ### 2.2.  It’s important to note that in this particular case, accuracy and loss actually serve as the same quality metric (do you know why?).
 

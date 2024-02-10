@@ -70,7 +70,7 @@ compare_to = 32 # compare to FP32
 [search.strategy.setup]
 n_jobs = 1
 n_trials = 18
-timeout = 20000
+timeout = 20
 # sampler = "tpe" # Change to reflect brute force method
 sampler = "brute_force"
 # sum_scaled_metrics = true # single objective

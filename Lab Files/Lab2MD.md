@@ -311,6 +311,8 @@ Many examples of existing passes are in the [source code](../..//machop/chop/pas
 
 Implement a pass to count the number of FLOPs (floating-point operations) and BitOPs (bit-wise operations).
 
+You can use any implementation, and extra points for discussing the impact of that choice on the accuracy and performance.
+
 Code to calculate the FLOPs for each module in a mase graph:
 
 ```python
@@ -539,3 +541,19 @@ def calculate_flops_pass(module, in_data, out_data):
         print("Unsupported module type for analysis:", type(module))
 ```
 
+When calculating FLOPs (Floating Point Operations per Second) manually in the context of a neural network, the process can offer a more accurate estimation of the computational complexity of the network compared to empirical FLOPS measurement during actual runtime. This accuracy is due to the manual calculation taking into account the exact architecture of the neural network. Manual calculation allows for a precise accounting of all the mathematical operations required for a forward or backwards pass  through the network.
+
+Measuring FLOPS empirically during runtime involves running the network on specific hardware and observing the actual computational performance. This method can be influenced by factors unrelated to the network's inherent complexity, such as hardware efficiency, software optimization, background processes, and the overhead of moving data between memory and processing units. These factors can lead to a measurement that reflects not just the complexity of the neural network, but also the performance characteristics of the specific runtime environment, which may not scale linearly with network complexity or might not be applicable across different hardware platforms.
+
+Therefore, manual calculation of FLOPs for a neural network is considered more accurate for understanding the network's computational complexity.
+
+There are packages which do the manual method automatically, but are either inaccurate or do not measure the backwards pass.
+
+https://detectron2.readthedocs.io/en/latest/modules/fvcore.html
+https://github.com/sovrasov/flops-counter.pytorch/tree/master/ptflops
+https://github.com/1adrianb/pytorch-estimate-flops
+
+Some examples of empirical measurement packages are:
+
+https://icl.utk.edu/papi/
+https://docs.nvidia.com/deeplearning/frameworks/dlprof-user-guide/

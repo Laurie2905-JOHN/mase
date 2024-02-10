@@ -55,6 +55,8 @@ class SearchStrategyOptuna(SearchStrategyBase):
                 sampler = optuna.samplers.QMCSampler()
             case "brute_force":
                 sampler = optuna.samplers.BruteForceSampler()
+            case "grid":
+                sampler = optuna.samplers.GridSampler()
             case _:
                 raise ValueError(f"Unknown sampler name: {name}")
         return sampler
@@ -68,6 +70,8 @@ class SearchStrategyOptuna(SearchStrategyBase):
                     metrics |= runner(self.data_module, model, sampled_config)
         else:
             for runner in self.sw_runner:
+                import pdb
+                # pdb.set_trace()
                 metrics |= runner(self.data_module, model, sampled_config)
         return metrics
 
@@ -92,6 +96,8 @@ class SearchStrategyOptuna(SearchStrategyBase):
             sampled_config = search_space.flattened_indexes_to_config(sampled_indexes)
 
         is_eval_mode = self.config.get("eval_mode", True)
+        # import pdb
+        # pdb.set_trace()
         model = search_space.rebuild_model(sampled_config, is_eval_mode)
 
         software_metrics = self.compute_software_metrics(
