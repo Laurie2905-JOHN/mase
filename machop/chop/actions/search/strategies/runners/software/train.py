@@ -64,6 +64,7 @@ class RunnerBasicTrain(SWRunnerBase):
         self._setup_metric()
 
     def _setup_metric(self):
+        # Add self.model_info.is_physical_model to allow for physical models
         if self.model_info.is_vision_model or self.model_info.is_physical_model:
             match self.task:
                 case "classification" | "cls":
@@ -106,8 +107,11 @@ class RunnerBasicTrain(SWRunnerBase):
     def vision_cls_forward(self, batch, model):
         x, y = batch[0].to(self.accelerator), batch[1].to(self.accelerator)
         logits = model(x)
+        # Define loss as cross entropy for classification
         loss = torch.nn.functional.cross_entropy(logits, y)
+        # Calculate accuracy
         acc = self.metric(logits, y)
+        # Append loss
         self.loss(loss)
         return {"loss": loss, "accuracy": acc}
 
@@ -156,14 +160,6 @@ class RunnerBasicTrain(SWRunnerBase):
         )
         num_batches = math.ceil(num_samples / data_module.batch_size)
 
-        # print("num_batches", num_batches)
-        # print("num_samples", num_samples)
-        # print("num_batches_per_epoch", num_batches_per_epoch)
-        # print("batch_size", data_module.batch_size)
-        # input()
-
-        # ddp_sampler = DistributedSampler(data_module.train_dataset)
-
         train_dataloader = data_module.train_dataloader()
         steps_per_epoch = len(train_dataloader)
 
@@ -204,6 +200,7 @@ class RunnerBasicTrain(SWRunnerBase):
                 batch = next(train_iter)
 
             model.train()
+            # Train using loss
             loss_i = self.forward(self.task, batch, model)['loss']
             loss_i = loss_i / grad_accumulation_steps
 

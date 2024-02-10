@@ -20,13 +20,8 @@ name = "graph/quantize/channel_size_modifier"
 by = 'name'
 
 [search.search_space.seed.default.config]
-# the only choice "NA" is used to indicate that layers are not quantized by default
 name = ["NA"]
 channel_multiplier = [1, 2, 3, 5]
-
-# [search.search_space.seed.features.config]
-# in_features = 16
-# out_features = 16
 
 [search.search_space.seed.seq_blocks_2.config]
 name = ["output_only"]
@@ -50,21 +45,21 @@ channel_multiplier = [1, 2, 3, 5]
 
 [search.strategy]
 name = "optuna"
-eval_mode = false
+eval_mode = true
 
-# [search.strategy.sw_runner.basic_evaluation]
-# data_loader = "val_dataloader"
-# num_samples = 512
+[search.strategy.sw_runner.basic_evaluation]
+data_loader = "val_dataloader"
+num_samples = 512
 
-[search.strategy.sw_runner.basic_train]
-name = "accuracy"
-data_loader = "train_dataloader"
-num_samples = 1000000
-max_epochs = 10
-lr_scheduler = "linear"
-optimizer = "adam"
-learning_rate = 1e-4
-num_warmup_steps = 0
+# [search.strategy.sw_runner.basic_train]
+# name = "accuracy"
+# data_loader = "train_dataloader"
+# num_samples = 1000000
+# max_epochs = 10
+# lr_scheduler = "linear"
+# optimizer = "adam"
+# learning_rate = 1e-4
+# num_warmup_steps = 0
 
 [search.strategy.hw_runner.average_bitwidth]
 compare_to = 32 # compare to FP32
