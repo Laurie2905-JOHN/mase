@@ -1,0 +1,95 @@
+# Basic experiment setup
+model = "vgg7"
+dataset = "cifar10"
+task = "cls"
+
+max_epochs = 5
+batch_size = 512
+learning_rate = 1e-2
+accelerator = "gpu"
+project = "vgg7-search-test"
+seed = 42
+log_every_n_steps = 5
+# Path to the pre-trained model checkpoint to load
+load_name = "../mase_output/VGG_1E/software/training_ckpts/best.ckpt"
+load_type = "pl"
+
+# Define the search space for the experiment
+[search.search_space]
+name = "graph/quantize/channel_size_modifier"
+
+# Setup the criteria for applying modifications
+[search.search_space.setup]
+by = 'name'
+
+# Default configuration for layers not explicitly quantized
+[search.search_space.seed.default.config]
+name = ["NA"] # NA indicates no quantization by default
+
+# Configuration for the first feature layer to modify output channels only
+[search.search_space.seed.feature_layers_0.config]
+name = ["output_only"]
+channel_multiplier = [1, 2, 3]  # Original values
+
+# Inherit configuration from the first feature layer
+[search.search_space.seed.feature_layers_1.config]
+parent = ["feature_layers_0"]
+
+# Configuration for modifying both input and output channels of the third feature layer
+[search.search_space.seed.feature_layers_3.config]
+name = ["both"]
+parent = ["feature_layers_0"]
+channel_multiplier = [1, 2, 3]  # Original values
+
+# Inherit configuration from the third feature layer
+[search.search_space.seed.feature_layers_4.config]
+parent = ["feature_layers_3"]
+
+# Repeat the pattern for subsequent layers, modifying configurations and inheriting as needed
+[search.search_space.seed.feature_layers_7.config]
+name = ["both"]
+parent = ["feature_layers_3"]
+channel_multiplier = [1, 2, 3]  # Original values
+
+[search.search_space.seed.feature_layers_8.config]
+parent = ["feature_layers_7"]
+
+[search.search_space.seed.feature_layers_10.config]
+name = ["both"]
+parent = ["feature_layers_7"]
+channel_multiplier = [1, 2, 3]  # Original values
+
+[search.search_space.seed.feature_layers_11.config]
+name = ["input_only"]
+parent = ["feature_layers_10"]
+
+[search.search_space.seed.feature_layers_14.config]
+name = ["input_only"]
+parent = ["feature_layers_10"]
+
+# Define the search strategy and execution parameters
+[search.strategy]
+name = "optuna"
+eval_mode = false
+
+[search.strategy.sw_runner.basic_evaluation]
+data_loader = "val_dataloader"
+num_samples = 512
+
+# Configuration for hardware runner to compare average bitwidth against FP32
+[search.strategy.hw_runner.average_bitwidth]
+compare_to = 32
+
+# Setup for the search execution
+[search.strategy.setup]
+n_jobs = 1
+n_trials = 2
+timeout = 20000
+sampler = "tpe"
+sum_scaled_metrics = true
+direction = "maximize"
+
+# Metrics configuration for evaluating the search
+[search.strategy.metrics]
+accuracy.scale = 1.0
+accuracy.direction = "maximize"

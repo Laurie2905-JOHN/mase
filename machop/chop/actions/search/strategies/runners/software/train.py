@@ -20,6 +20,7 @@ from .base import SWRunnerBase
 
 
 def get_optimizer(model, optimizer: str, learning_rate, weight_decay=0.0):
+    # Retrieve the original model if input is a MaseGraph
     if isinstance(model, MaseGraph):
         model = model.model
     no_decay = ["bias", "LayerNorm.weight"]
@@ -87,18 +88,39 @@ class RunnerBasicTrain(SWRunnerBase):
             raise ValueError(f"model type {self.model_info} is not supported.")
 
     def nlp_cls_forward(self, batch, model):
+        # Remove the "sentence" key-value pair from the batch dictionary if it exists.
         batch.pop("sentence")
+
+        # Move each tensor in the batch to the accelerator device (e.g., GPU) if it's a tensor.
+        # Leave the data as-is if it's not a tensor.
         batch = {
             k: v.to(self.accelerator) if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
         }
+
+        # Pass the batch through the model. This computes the forward pass.
         outputs = model(**batch)
+
+        # Extract the loss from the model's outputs.
         loss = outputs["loss"]
+
+        # Extract the logits (model predictions before applying an activation function) from the outputs.
         logits = outputs["logits"]
+
+        # Extract the labels from the batch.
         labels = batch["labels"]
+
+        # Adjust the labels tensor depending on its length.
+        # If there's only one label, take the first item; otherwise, squeeze the tensor to remove any single dimensions.
         labels = labels[0] if len(labels) == 1 else labels.squeeze()
+
+        # Compute and update the metrics for this batch based on the logits and labels.
         self.metric(logits, labels)
+
+        # Update the tracked loss using the loss value from this batch.
         self.loss(loss)
+
+        # Return the loss for this batch.
         return loss
 
     def nlp_lm_forward(self, batch, model):
@@ -163,9 +185,6 @@ class RunnerBasicTrain(SWRunnerBase):
         train_dataloader = data_module.train_dataloader()
         steps_per_epoch = len(train_dataloader)
 
-        # torch 2.0
-        # model = torch.compile(model)
-
         optimizer = get_optimizer(
             model=model,
             optimizer=self.config["optimizer"],
@@ -182,12 +201,10 @@ class RunnerBasicTrain(SWRunnerBase):
         grad_accumulation_steps = self.config.get("gradient_accumulation_steps", 1)
         assert grad_accumulation_steps > 0, "num_accumulation_steps must be > 0"
 
+        # Define model as original network and not the MaseGraph
         if isinstance(model, MaseGraph):
             model = model.model
 
-        # print("num_batches", num_batches)
-        # print("train_dataloader", train_dataloader.dataset.__dict__)
-        # input()
         train_iter = iter(train_dataloader)
         for step_i in range(num_batches):
             if step_i > num_batches:
@@ -200,7 +217,7 @@ class RunnerBasicTrain(SWRunnerBase):
                 batch = next(train_iter)
 
             model.train()
-            # Train using loss
+            # Extract loss from forward pass
             loss_i = self.forward(self.task, batch, model)['loss']
             loss_i = loss_i / grad_accumulation_steps
 
@@ -210,7 +227,5 @@ class RunnerBasicTrain(SWRunnerBase):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-
-            # print(f"step {step_i} loss: {loss_i.item()}")
 
         return self.compute()

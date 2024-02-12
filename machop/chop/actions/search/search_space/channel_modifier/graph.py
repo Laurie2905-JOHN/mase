@@ -56,12 +56,13 @@ class ChannelSizeModifier(SearchSpaceBase):
         else:
             self.model.train()  # Set model to training mode
 
-        assert self.model_info.is_fx_traceable, "Model must be fx traceable"
-        mg = MaseGraph(self.model)  # Create a MaseGraph from the model
-        mg, _ = init_metadata_analysis_pass(mg, None)  # Initialize metadata analysis
+        # Self did not work, neither deepcopy so this was a workaround.
+        mg = MaseGraph(self.model)
+        mg, _ = init_metadata_analysis_pass(mg, None)
         mg, _ = add_common_metadata_analysis_pass(
             mg, {"dummy_in": self.dummy_input, "force_device_meta": False}
         )
+        
         if sampled_config is not None:
             mg, _ = redefine_transform_pass(mg, {"config": sampled_config})  # Apply channel size modifications
         mg.model.to(self.accelerator)  # Move the modified graph's model to the specified device
@@ -74,29 +75,19 @@ class ChannelSizeModifier(SearchSpaceBase):
 
         :return: None. The method updates the instance's choice mappings.
         """
-        mase_graph = self.rebuild_model(sampled_config=None, is_eval_mode=False)  # Rebuild model without specific config to get base graph
-        node_info = {}  # Dictionary to hold information about each node
+
+        # Build a mapping from node name to mase_type and mase_op.
+        mase_graph = self.rebuild_model(sampled_config=None, is_eval_mode=True)
+
+        # Build the search space
+        choices = {}
+        seed = self.config["seed"]
+
         for node in mase_graph.fx_graph.nodes:
-            # Populate node_info with mase type and operation of each node
-            node_info[node.name] = {
-                "mase_type": get_mase_type(node),
-                "mase_op": get_mase_op(node),
-            }
-
-        choices = {}  # Dictionary to hold channel size choices for each node
-        seed = self.config["seed"]  # Seed configuration for deterministic behavior
-
-        # Determine how to configure channel size modification based on setup criteria
-        match self.config["setup"]["by"]:
-            case "name":
-                # Process each node based on its name, checking against the seed for specific configurations
-                for n_name, n_info in node_info.items():
-                    if n_info["mase_op"] in CHANNEL_OP:
-                        # Assign channel size choice based on seed or use the default configuration
-                        choices[n_name] = deepcopy(seed[n_name]) if n_name in seed else deepcopy(seed["default"])
-            case _:
-                # Raise an error if the configuration method is unknown
-                raise ValueError(f"Unknown setup method: {self.config['setup']['by']}")
+            if node.name in seed:
+                choices[node.name] = deepcopy(seed[node.name])
+            else:
+                choices[node.name] = deepcopy(seed["default"])
 
         # Flatten the choices dictionary for easier access and manipulation
         flatten_dict(choices, flattened=self.choices_flattened)

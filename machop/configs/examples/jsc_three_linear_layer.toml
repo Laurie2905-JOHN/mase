@@ -6,7 +6,7 @@ max_epochs = 20
 batch_size = 512
 learning_rate = 1e-2
 accelerator = "gpu"
-project = "jsc-final-2"
+project = "jsc-final-3"
 seed = 0
 log_every_n_steps = 5
 load_name = "/home/laurie2905/mase/mase_output/Three-Linear-Layer/jsc-three-linear-layers_classification_jsc_2024-02-08/software/training_ckpts/best.ckpt"
@@ -21,36 +21,33 @@ by = 'name'
 
 [search.search_space.seed.default.config]
 name = ["NA"]
-channel_multiplier = [1, 2, 3, 5]
+channel_multiplier = [1]
 
 [search.search_space.seed.seq_blocks_2.config]
 name = ["output_only"]
-channel_multiplier = [1, 2, 3, 5]
-in_features = [16]
-out_features = [16]
+channel_multiplier = [1, 2, 4]
 
 
 [search.search_space.seed.seq_blocks_4.config]
 name = ["both"]
-in_features = [16]
-out_features = [16]
-channel_multiplier = [1, 2, 3, 5]
+parent = ['seq_blocks_2']
+channel_multiplier = [3, 2, 3, 5]
 
+# Has to be input only as number of classes = 5
 [search.search_space.seed.seq_blocks_6.config]
 name = ["input_only"]
-in_features = [16]
-out_features = [16]
 channel_multiplier = [1, 2, 3, 5]
+parent = ['seq_blocks_4']
 
-
+# # Section for validation
 # [search.strategy]
 # name = "optuna"
 # eval_mode = true
-
 # [search.strategy.sw_runner.basic_evaluation]
 # data_loader = "val_dataloader"
 # num_samples = 512
 
+# Section for training
 [search.strategy]
 name = "optuna"
 eval_mode = false
@@ -58,7 +55,7 @@ eval_mode = false
 name = "accuracy"
 data_loader = "train_dataloader"
 num_samples = 1000000
-max_epochs = 20
+max_epochs = 1
 lr_scheduler = "linear"
 optimizer = "adam"
 learning_rate = 1e-4
@@ -69,9 +66,9 @@ compare_to = 32 # compare to FP32
 
 [search.strategy.setup]
 n_jobs = 1
-n_trials = 50
+n_trials = 5
 timeout = 20000
-sampler = "tpe"
+sampler = "brute_force"
 sum_scaled_metrics = true # single objective
 direction = "maximize"
 

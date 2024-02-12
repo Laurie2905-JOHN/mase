@@ -8,9 +8,9 @@ The operations are defined as follows:
 
 2. get_attr: These nodes are used to fetch parameters from your model, such as weights from layers. They locate the parameters within the model’s structure. Fetches a parameter from the module hierarchy; 'name' labels the result, 'target' identifies the parameter's location in the hierarchy, 'args' and 'kwargs' are unused.
 
-3. call_function: These nodes represent the application of standalone functions (like torch.add) on data. They keep track of the function being used and the arguments it takes.Applies a function to values; 'name' labels the result, 'target' is the function, 'args' and 'kwargs' are the function's arguments, following Python's convention
+3. call_function: These nodes represent the application of standalone functions (like torch.add) on data. They keep track of the function being used and the arguments it takes. Applies a function to values; 'name' labels the result, 'target' is the function, 'args' and 'kwargs' are the function's arguments, following Python's convention
 
-4. call_module: These are used when a specific module (a layer in your neural network) is called. 'name' labels the result, 'target' is the module's location in the hierarchy, 'args' and 'kwargs' are arguments excluding 'self'.
+4. call_module: These are used when a specific module (a layer in the neural network) is called. 'name' labels the result, 'target' is the module's location in the hierarchy, 'args' and 'kwargs' are arguments excluding 'self'.
 
 5. call_method: Similar to Call_Function, but these nodes are for methods that belong to an object (like tensor.view()). They record the method being called, including the object it is called on (self) and other arguments. 'name' for labeling, 'target' is the method's name, 'args' and 'kwargs' include all method arguments including 'self'.
 
@@ -306,14 +306,6 @@ INFO     Saved mase graph to /home/laurie2905/mase/mase_output/jsc-tiny-TPE/soft
 INFO     Transformation is completed
 ``` 
 ### 8. \[Optional\] Write your own pass
-
-Many examples of existing passes are in the [source code](../..//machop/chop/passes/__init__.py), the [test files](../../machop/test/passes) for these passes also contain useful information on helping you to understand how these passes are used.
-
-Implement a pass to count the number of FLOPs (floating-point operations) and BitOPs (bit-wise operations).
-
-You can use any implementation, and extra points for discussing the impact of that choice on the accuracy and performance.
-
-Code to calculate the FLOPs for each module in a mase graph:
 
 ```python
 # Import necessary libraries
