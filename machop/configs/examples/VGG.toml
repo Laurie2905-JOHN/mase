@@ -11,8 +11,8 @@ project = "vgg7-search-test_colab"
 seed = 42
 log_every_n_steps = 5
 # Path to the pre-trained model checkpoint to load
-load_name = "../mase_output/VGG_1E/software/training_ckpts/best.ckpt"
-load_type = "pl"
+# load_name = "../mase_output/VGG_1E/software/training_ckpts/best.ckpt"
+# load_type = "pl"
 
 # Define the search space for the experiment
 [search.search_space]
