@@ -630,46 +630,66 @@ name = ["both"]
 parent = ["feature_layers_0"]
 channel_multiplier = [1, 2, 3]  # Original values
 ```
-The attempt was made to run, but my laptop couldn't handle the large network size. However, both the TOML configuration and the code are functional. Below is the error message I encountered:
+The attempt was made to run and train, however limited by time the code could only show to be working. Both the TOML configuration and the code are functional.
 
 ``` python
-[W 2024-02-11 22:10:21,679] Trial 0 failed with value None.                                                                                                                                
-  0%|                                                                                                                                                                | 0/2 [00:57<?, ?it/s]
-Traceback (most recent call last):
-  File "/home/laurie2905/mase/machop/./ch", line 6, in <module>
-    ChopCLI().run()
-  File "/home/laurie2905/mase/machop/chop/cli.py", line 270, in run
-    run_action_fn()
-  File "/home/laurie2905/mase/machop/chop/cli.py", line 395, in _run_search
-    search(**search_params)
-  File "/home/laurie2905/mase/machop/chop/actions/search/search.py", line 92, in search
-    strategy.search(search_space)
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/optuna.py", line 143, in search
-    study.optimize(
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/optuna/study/study.py", line 451, in optimize
-    _optimize(
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/optuna/study/_optimize.py", line 66, in _optimize
-    _optimize_sequential(
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/optuna/study/_optimize.py", line 163, in _optimize_sequential
-    frozen_trial = _run_trial(study, func, catch)
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/optuna/study/_optimize.py", line 251, in _run_trial
-    raise func_err
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/optuna/study/_optimize.py", line 200, in _run_trial
-    value_or_values = func(trial)
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/optuna.py", line 103, in objective
-    software_metrics = self.compute_software_metrics(
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/optuna.py", line 75, in compute_software_metrics
-    metrics |= runner(self.data_module, model, sampled_config)
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/runners/software/eval.py", line 128, in __call__
-    outputs = self.forward(batch, forward_model)
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/runners/software/eval.py", line 62, in forward
-    return self.vision_cls_forward(batch, model)
-  File "/home/laurie2905/mase/machop/chop/actions/search/strategies/runners/software/eval.py", line 77, in vision_cls_forward
-    loss = torch.nn.functional.cross_entropy(logits, y)
-  File "/home/laurie2905/anaconda3/envs/mase/lib/python3.10/site-packages/torch/nn/functional.py", line 3059, in cross_entropy
-    return torch._C._nn.cross_entropy_loss(input, target, weight, _Reduction.get_enum(reduction), ignore_index, label_smoothing)
-RuntimeError: CUDA error: out of memory
-CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
-For debugging consider passing CUDA_LAUNCH_BLOCKING=1.
-Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
-```
+2024-02-12 15:35:15.188743: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2024-02-12 15:35:15.189327: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2024-02-12 15:35:15.191200: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2024-02-12 15:35:16.606175: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+/content/mase/machop/mase/machop/chop/actions/simulate.py:3: UserWarning: Python runners and associated APIs are an experimental feature and subject to change.
+  from cocotb.runner import get_runner, get_results
+Seed set to 0
++-------------------------+--------------------------+------------------------+-----------------+--------------------------+
+| Name                    |         Default          |      Config. File      | Manual Override |        Effective         |
++-------------------------+--------------------------+------------------------+-----------------+--------------------------+
+| task                    |      classification      |          cls           |                 |           cls            |
+| load_name               |           None           |                        |                 |           None           |
+| load_type               |            mz            |                        |                 |            mz            |
+| batch_size              |           128            |          512           |                 |           512            |
+| to_debug                |          False           |                        |                 |          False           |
+| log_level               |           info           |                        |                 |           info           |
+| report_to               |       tensorboard        |                        |                 |       tensorboard        |
+| seed                    |            0             |           42           |                 |            42            |
+| quant_config            |           None           |                        |                 |           None           |
+| training_optimizer      |           adam           |                        |                 |           adam           |
+| trainer_precision       |         16-mixed         |                        |                 |         16-mixed         |
+| learning_rate           |          1e-05           |          0.01          |                 |           0.01           |
+| weight_decay            |            0             |                        |                 |            0             |
+| max_epochs              |            20            |           5            |                 |            5             |
+| max_steps               |            -1            |                        |                 |            -1            |
+| accumulate_grad_batches |            1             |                        |                 |            1             |
+| log_every_n_steps       |            50            |           5            |                 |            5             |
+| num_workers             |            2             |                        |                 |            2             |
+| num_devices             |            1             |                        |                 |            1             |
+| num_nodes               |            1             |                        |                 |            1             |
+| accelerator             |           auto           |          gpu           |                 |           gpu            |
+| strategy                |           auto           |                        |                 |           auto           |
+| is_to_auto_requeue      |          False           |                        |                 |          False           |
+| github_ci               |          False           |                        |                 |          False           |
+| disable_dataset_cache   |          False           |                        |                 |          False           |
+| target                  |   xcu250-figd2104-2L-e   |                        |                 |   xcu250-figd2104-2L-e   |
+| num_targets             |           100            |                        |                 |           100            |
+| is_pretrained           |          False           |                        |                 |          False           |
+| max_token_len           |           512            |                        |                 |           512            |
+| project_dir             | /content/mase/machop/mas |                        |                 | /content/mase/machop/mas |
+|                         |      e/mase_output       |                        |                 |      e/mase_output       |
+| project                 |           None           | vgg7-search-test_colab |                 |  vgg7-search-test_colab  |
+| model                   |           None           |          vgg7          |                 |           vgg7           |
+| dataset                 |           None           |        cifar10         |                 |         cifar10          |
++-------------------------+--------------------------+------------------------+-----------------+--------------------------+
+INFO     Initialising model 'vgg7'...
+INFO     Initialising dataset 'cifar10'...
+INFO     Project will be created at /content/mase/machop/mase/mase_output/vgg7-search-test_colab
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+Files already downloaded and verified
+INFO     Building search space...
+INFO     Search started...
+  0% 0/2 [00:00<?, ?it/s]WARNING  No quantized layers found in the model, set average_bitwidth to 32
+Best trial: 0. Best value: 0.461928:  50% 1/2 [02:46<02:46, 166.11s/it, 166.11/20000 seconds]
