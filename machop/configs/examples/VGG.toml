@@ -7,7 +7,7 @@ max_epochs = 5
 batch_size = 512
 learning_rate = 1e-2
 accelerator = "gpu"
-project = "vgg7-search-test"
+project = "vgg7-search-test_colab"
 seed = 42
 log_every_n_steps = 5
 # Path to the pre-trained model checkpoint to load
@@ -68,13 +68,27 @@ name = ["input_only"]
 parent = ["feature_layers_10"]
 
 # Define the search strategy and execution parameters
+# [search.strategy]
+# name = "optuna"
+# eval_mode = false
+
+# [search.strategy.sw_runner.basic_evaluation]
+# data_loader = "val_dataloader"
+# num_samples = 512
+
+# Section for training
 [search.strategy]
 name = "optuna"
 eval_mode = false
-
-[search.strategy.sw_runner.basic_evaluation]
-data_loader = "val_dataloader"
-num_samples = 512
+[search.strategy.sw_runner.basic_train]
+name = "accuracy"
+data_loader = "train_dataloader"
+num_samples = 1000000
+max_epochs = 5
+lr_scheduler = "linear"
+optimizer = "adam"
+learning_rate = 1e-4
+num_warmup_steps = 0
 
 # Configuration for hardware runner to compare average bitwidth against FP32
 [search.strategy.hw_runner.average_bitwidth]
